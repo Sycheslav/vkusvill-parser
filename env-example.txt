@@ -1,0 +1,18 @@
+# Настройки города и адреса
+CITY_NAME=Москва
+
+
+# Тайминги и ограничения
+THROTTLE_MIN=1.0
+THROTTLE_MAX=2.0
+SCROLL_DELAY_MIN=1.0
+SCROLL_DELAY_MAX=1.5
+MAX_HOURS=10
+MAX_CONCURRENT=2
+
+# Настройки браузера
+HEADLESS=1
+
+# Настройки логирования
+LOG_LEVEL=INFO
+LOG_FILE=data/out/scraper.log

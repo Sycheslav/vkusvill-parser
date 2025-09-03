@@ -1,0 +1,72 @@
+# Конфигурация скрейпера готовой еды
+
+# Настройки города и адреса
+city: "Москва"
+coords: null  # "55.751244,37.618423" для Москвы
+
+# Источники для скрапинга
+sources:
+  - samokat
+  # - lavka
+  # - vkusvill
+
+# Категории для скрапинга (пусто = автоопределение)
+categories: []
+
+# Лимит продуктов на категорию (пусто = без ограничений)
+limit: null
+
+# Загрузка изображений
+download_images: false
+
+# Настройки браузера
+headless: true
+max_concurrent: 2
+
+# Тайминги и ограничения
+throttle_min: 1.0
+throttle_max: 2.0
+
+# Пути к файлам
+log_file: "data/out/scraper.log"
+db_path: "data/out/products.db"
+images_dir: "data/images"
+
+# Настройки прокси (если нужны)
+proxy: null
+# proxy:
+#   http: "http://proxy:port"
+#   https: "https://proxy:port"
+
+# Настройки cookies (если нужны)
+cookies_file: null
+
+# Настройки пользовательского агента
+user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Настройки таймаутов
+timeout_page_load: 30000
+timeout_element_wait: 10000
+
+# Настройки повторных попыток
+max_retries: 3
+retry_delay: 5
+
+# Настройки логирования
+log_level: "INFO"
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Настройки экспорта
+export_formats:
+  - csv
+  - jsonl
+  - sqlite
+  # - parquet  # требует pandas
+
+# Настройки изображений
+image_quality: 85
+image_max_size: [800, 800]
+image_formats:
+  - jpg
+  - png
+  - webp

@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  food-scraper:
+    build: .
+    container_name: food-scraper
+    volumes:
+      # Монтируем директории для данных
+      - ./data:/app/data
+      # Монтируем конфигурацию
+      - ./config.yaml:/app/config.yaml:ro
+      # Монтируем переменные окружения
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONPATH=/app
+      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
+    # Для отладки можно раскомментировать
+    # stdin_open: true
+    # tty: true
+    # command: ["--help"]
+    
+  # Пример запуска с конкретными параметрами
+  samokat-scraper:
+    build: .
+    container_name: samokat-scraper
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--source", "samokat", "--city", "Москва", "--out", "data/out/samokat.csv"]
+    environment:
+      - PYTHONPATH=/app
+      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
+      
+  # Пример запуска всех источников
+  all-sources-scraper:
+    build: .
+    container_name: all-sources-scraper
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--source", "all", "--city", "Москва", "--download-images", "--out", "data/out/all_sources.sqlite"]
+    environment:
+      - PYTHONPATH=/app
+      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
