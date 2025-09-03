@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
-from ..utils.normalizer import DataNormalizer
-from ..utils.storage import DataStorage
+# Убираем импорты, чтобы избежать циклических зависимостей
+# DataNormalizer и DataStorage будут импортироваться лениво при необходимости
 
 
 @dataclass
@@ -57,8 +57,8 @@ class BaseScraper(ABC):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.normalizer = DataNormalizer()
-        self.storage = DataStorage()
+        # self.normalizer = DataNormalizer() # Удалено
+        # self.storage = DataStorage() # Удалено
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
@@ -186,6 +186,6 @@ class BaseScraper(ABC):
                 
         return all_products
         
-    def normalize_product(self, product: ScrapedProduct) -> ScrapedProduct:
-        """Нормализация данных продукта"""
-        return self.normalizer.normalize_product(product)
+    # def normalize_product(self, product: ScrapedProduct) -> ScrapedProduct: # Удалено
+    #     """Нормализация данных продукта""" # Удалено
+    #     return self.normalizer.normalize_product(product) # Удалено

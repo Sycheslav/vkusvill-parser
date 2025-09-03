@@ -12,10 +12,27 @@ import click
 import yaml
 from dotenv import load_dotenv
 
-from .sources import SamokatScraper, LavkaScraper, VkusvillScraper
-from .utils.logger import setup_logger, ScraperLogger
-from .utils.storage import DataStorage
-from .utils.image_downloader import ImageDownloader
+# Используем абсолютные импорты
+try:
+    from src.sources import SamokatScraper, LavkaScraper, VkusvillScraper
+    from src.utils.logger import setup_logger, ScraperLogger
+    from src.utils.storage import DataStorage
+    from src.utils.image_downloader import ImageDownloader
+except ImportError:
+    try:
+        from sources import SamokatScraper, LavkaScraper, VkusvillScraper
+        from utils.logger import setup_logger, ScraperLogger
+        from utils.storage import DataStorage
+        from utils.image_downloader import ImageDownloader
+    except ImportError:
+        # Для тестирования
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from sources import SamokatScraper, LavkaScraper, VkusvillScraper
+        from utils.logger import setup_logger, ScraperLogger
+        from utils.storage import DataStorage
+        from utils.image_downloader import ImageDownloader
 
 
 class FoodScraper:

@@ -29,6 +29,9 @@ class DataNormalizer:
     def normalize_product(self, product: ScrapedProduct) -> ScrapedProduct:
         """Нормализация всех полей продукта"""
         try:
+            # Нормализуем имя
+            product.name = self._normalize_name(product.name)
+            
             # Нормализуем числовые поля
             product.kcal_100g = self._normalize_kcal(product.kcal_100g, product.portion_g)
             product.protein_100g = self._normalize_nutrition(product.protein_100g, product.portion_g)
@@ -68,16 +71,22 @@ class DataNormalizer:
             self.logger.error(f"Ошибка нормализации продукта {product.id}: {e}")
             return product
             
+    def _normalize_name(self, name: str) -> str:
+        """Нормализация названия продукта"""
+        if not name:
+            return ""
+            
+        # Убираем лишние пробелы в начале и конце
+        return name.strip()
+            
     def _normalize_kcal(self, kcal: Optional[float], portion_g: Optional[float]) -> Optional[float]:
         """Нормализация калорий к значению на 100г"""
         if kcal is None:
             return None
             
-        # Если калории указаны на порцию, а не на 100г
+        # Если указана масса порции, пересчитываем калории на 100г
         if portion_g and portion_g > 0:
-            # Предполагаем, что калории указаны на порцию, если они больше 500
-            if kcal > 500:
-                kcal = (kcal / portion_g) * 100
+            kcal = (kcal / portion_g) * 100
                 
         return round(kcal, 1) if kcal else None
         
@@ -86,11 +95,9 @@ class DataNormalizer:
         if value is None:
             return None
             
-        # Если БЖУ указаны на порцию, а не на 100г
+        # Если указана масса порции, пересчитываем БЖУ на 100г
         if portion_g and portion_g > 0:
-            # Предполагаем, что БЖУ указаны на порцию, если сумма больше 50г
-            if value > 50:
-                value = (value / portion_g) * 100
+            value = (value / portion_g) * 100
                 
         return round(value, 1) if value else None
         
@@ -229,18 +236,18 @@ class DataNormalizer:
         if kcal_match:
             nutrition['kcal'] = float(kcal_match.group(1).replace(',', '.'))
             
-        # Ищем белки
-        protein_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:г|g)\s*(?:бел|протеин|protein)', text, re.I)
+        # Ищем белки - более гибкий поиск
+        protein_match = re.search(r'белки?[:\s]*(\d+(?:[.,]\d+)?)', text, re.I)
         if protein_match:
             nutrition['protein'] = float(protein_match.group(1).replace(',', '.'))
             
-        # Ищем жиры
-        fat_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:г|g)\s*(?:жир|fat)', text, re.I)
+        # Ищем жиры - более гибкий поиск
+        fat_match = re.search(r'жиры?[:\s]*(\d+(?:[.,]\d+)?)', text, re.I)
         if fat_match:
             nutrition['fat'] = float(fat_match.group(1).replace(',', '.'))
             
-        # Ищем углеводы
-        carb_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:г|g)\s*(?:углев|carb)', text, re.I)
+        # Ищем углеводы - более гибкий поиск
+        carb_match = re.search(r'углеводы?[:\s]*(\d+(?:[.,]\d+)?)', text, re.I)
         if carb_match:
             nutrition['carb'] = float(carb_match.group(1).replace(',', '.'))
             
@@ -269,9 +276,29 @@ class DataNormalizer:
         if not text:
             return None
             
-        # Убираем лишние символы и извлекаем число
-        price_match = re.search(r'(\d+(?:[.,]\d+)?)', text.replace(' ', ''))
+        # Убираем лишние символы и пробелы
+        clean_text = text.replace('₽', '').replace('руб', '').replace('руб.', '')
+        
+        # Ищем число с возможными пробелами или запятыми в тысячах
+        # Паттерн: число, возможно с пробелами/запятыми в тысячах, возможно с запятой в десятичной части
+        price_match = re.search(r'(\d{1,3}(?:[,\s]\d{3})*(?:[.,]\d+)?)', clean_text)
         if price_match:
-            return float(price_match.group(1).replace(',', '.'))
+            price_str = price_match.group(1)
+            
+            # Если есть точка, то это американский формат (1,250.50 -> 1250.50)
+            if '.' in price_str:
+                # Убираем все запятые и пробелы (это разделители тысяч)
+                price_str = price_str.replace(',', '').replace(' ', '')
+            else:
+                # Если точки нет, то запятая или пробел может быть десятичным разделителем
+                # Проверяем, есть ли запятая в конце (99,90 -> 99.90)
+                if price_str.endswith(',') or re.search(r',\d{1,2}$', price_str):
+                    # Запятая в конце - это десятичный разделитель
+                    price_str = price_str.replace(',', '.').replace(' ', '')
+                else:
+                    # Запятая или пробел в середине - это разделитель тысяч (1,250 -> 1250, 1 250 -> 1250)
+                    price_str = price_str.replace(',', '').replace(' ', '')
+                    
+            return float(price_str)
             
         return None

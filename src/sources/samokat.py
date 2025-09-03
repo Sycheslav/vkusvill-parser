@@ -7,7 +7,18 @@ from typing import List, Optional, Dict, Any
 from urllib.parse import urljoin, urlparse
 import asyncio
 
-from .base import BaseScraper, ScrapedProduct
+# Используем абсолютные импорты
+try:
+    from src.sources.base import BaseScraper, ScrapedProduct
+except ImportError:
+    try:
+        from sources.base import BaseScraper, ScrapedProduct
+    except ImportError:
+        # Для тестирования
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from sources.base import BaseScraper, ScrapedProduct
 
 
 class SamokatScraper(BaseScraper):

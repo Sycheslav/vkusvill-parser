@@ -11,7 +11,18 @@ import logging
 from PIL import Image
 import io
 
-from ..sources.base import ScrapedProduct
+# Используем абсолютные импорты
+try:
+    from src.sources.base import ScrapedProduct
+except ImportError:
+    try:
+        from sources.base import ScrapedProduct
+    except ImportError:
+        # Для тестирования
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from sources.base import ScrapedProduct
 
 
 class ImageDownloader:

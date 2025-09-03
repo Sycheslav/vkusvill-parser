@@ -1,12 +1,24 @@
 """
-Скрейпер для сервиса ВкусВилл (vkusvill.ru)
+Скрейпер для ВкусВилла (vkusvill.ru)
 """
 import re
 import logging
 from typing import List, Optional, Dict, Any
 from urllib.parse import urljoin, urlparse
+import asyncio
 
-from .base import BaseScraper, ScrapedProduct
+# Используем абсолютные импорты
+try:
+    from src.sources.base import BaseScraper, ScrapedProduct
+except ImportError:
+    try:
+        from sources.base import BaseScraper, ScrapedProduct
+    except ImportError:
+        # Для тестирования
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from sources.base import BaseScraper, ScrapedProduct
 
 
 class VkusvillScraper(BaseScraper):
@@ -39,66 +51,19 @@ class VkusvillScraper(BaseScraper):
                 """)
             
             # Ждем загрузки и ищем поле ввода адреса
-            address_selectors = [
-                'input[placeholder*="адрес"], input[placeholder*="Адрес"]',
-                'input[placeholder*="улица"], input[placeholder*="Улица"]',
-                '.address-input input', '[data-testid="address-input"]',
-                '.location-input', '.city-input'
-            ]
-            
-            address_input = None
-            for selector in address_selectors:
-                try:
-                    address_input = await self.page.wait_for_selector(selector, timeout=5000)
-                    if address_input:
-                        break
-                except:
-                    continue
-                    
+            address_input = await self.page.wait_for_selector('input[placeholder*="адрес"], input[placeholder*="Адрес"], input[data-testid="address-input"]', timeout=10000)
             if address_input:
                 await address_input.fill(self.city)
                 await self.random_delay(1, 2)
                 
                 # Ищем и кликаем по первому предложению
-                suggestion_selectors = [
-                    '.address-suggestion', '.suggestion-item', '.address-dropdown-item',
-                    '[data-testid="address-suggestion"]', '.suggestion', '.city-suggestion',
-                    '.location-suggestion', '.address-option'
-                ]
-                
-                suggestion = None
-                for selector in suggestion_selectors:
-                    try:
-                        suggestion = await self.page.wait_for_selector(selector, timeout=3000)
-                        if suggestion:
-                            break
-                    except:
-                        continue
-                        
+                suggestion = await self.page.wait_for_selector('.address-suggestion, .suggestion-item, [data-testid="address-suggestion"]', timeout=5000)
                 if suggestion:
                     await suggestion.click()
                     await self.random_delay(2, 4)
                     
             # Ждем загрузки витрины
-            catalog_selectors = [
-                '.catalog', '.products-grid', '[data-testid="catalog"]',
-                '.product-list', '.items-grid', '.catalog-container',
-                '.products-container', '.catalog-grid', '.product-grid'
-            ]
-            
-            catalog_loaded = False
-            for selector in catalog_selectors:
-                try:
-                    await self.page.wait_for_selector(selector, timeout=10000)
-                    catalog_loaded = True
-                    break
-                except:
-                    continue
-                    
-            if not catalog_loaded:
-                # Пробуем найти любые товары
-                await self.page.wait_for_selector('img[src*="product"], .product, .item, .product-card', timeout=15000)
-                
+            await self.page.wait_for_selector('.catalog, .products-grid, [data-testid="catalog"], .product-list', timeout=15000)
             self.logger.info(f"Локация настроена: {self.city}")
             
         except Exception as e:
@@ -113,9 +78,7 @@ class VkusvillScraper(BaseScraper):
             # Ищем категории готовой еды
             category_selectors = [
                 'a[href*="готов"], a[href*="кулинар"], a[href*="салат"], a[href*="суп"]',
-                '.category-item', '.menu-category', '[data-category]', '.category-link',
-                '.category-tab', '.category-button', '[data-testid="category"]',
-                '.category-name', '.category-title', '.menu-item'
+                '.category-item', '.menu-category', '[data-category]', '.category-link'
             ]
             
             categories = []
@@ -125,7 +88,7 @@ class VkusvillScraper(BaseScraper):
                     for elem in elements:
                         text = await elem.text_content()
                         href = await elem.get_attribute('href')
-                        if text and any(keyword in text.lower() for keyword in ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня']):
+                        if text and any(keyword in text.lower() for keyword in ['готов', 'кулинар', 'салат', 'суп', 'блюд']):
                             categories.append({
                                 'name': text.strip(),
                                 'url': urljoin(self.base_url, href) if href else None
@@ -141,9 +104,7 @@ class VkusvillScraper(BaseScraper):
                     {'name': 'Кулинария', 'url': None},
                     {'name': 'Салаты', 'url': None},
                     {'name': 'Супы', 'url': None},
-                    {'name': 'Горячие блюда', 'url': None},
-                    {'name': 'Готовые блюда', 'url': None},
-                    {'name': 'Кухня', 'url': None}
+                    {'name': 'Горячие блюда', 'url': None}
                 ]
                 
             self.logger.info(f"Найдено категорий: {len(categories)}")
@@ -151,7 +112,7 @@ class VkusvillScraper(BaseScraper):
             
         except Exception as e:
             self.logger.error(f"Ошибка получения категорий: {e}")
-            return ['Готовая еда', 'Кулинария', 'Салаты', 'Супы', 'Горячие блюда', 'Готовые блюда', 'Кухня']
+            return ['Готовая еда', 'Кулинария', 'Салаты', 'Супы', 'Горячие блюда']
             
     async def scrape_category(self, category: str, limit: int = None) -> List[ScrapedProduct]:
         """Скрапить продукты из указанной категории"""
@@ -161,9 +122,7 @@ class VkusvillScraper(BaseScraper):
             # Ищем товары на странице
             product_selectors = [
                 '.product-card', '.item-card', '.catalog-item', '[data-product]',
-                '.product', '.item', '.card', '.product-item', '.catalog-product',
-                '[data-testid="product"], .product-tile', '.item-tile',
-                '.product-wrapper', '.item-wrapper', '.catalog-item-wrapper'
+                '.product', '.item', '.card', '.product-item'
             ]
             
             products = []
@@ -210,90 +169,24 @@ class VkusvillScraper(BaseScraper):
         """Извлечь данные продукта из карточки товара"""
         try:
             # Основная информация
-            name_selectors = [
-                '.product-name', '.item-name', '.title', 'h3', 'h4',
-                '.product-title', '.item-title', '[data-testid="product-name"]',
-                '.name', '.product-name-text', '.item-title-text',
-                '.product-name-link', '.item-name-link'
-            ]
+            name_elem = await element.query_selector('.product-name, .item-name, .title, h3, h4, .product-title')
+            name = await name_elem.text_content() if name_elem else "Неизвестный товар"
+            name = name.strip() if name else "Неизвестный товар"
             
-            name = "Неизвестный товар"
-            for selector in name_selectors:
-                try:
-                    name_elem = await element.query_selector(selector)
-                    if name_elem:
-                        name_text = await name_elem.text_content()
-                        if name_text:
-                            name = name_text.strip()
-                            break
-                except:
-                    continue
-                    
             # Цена
-            price_selectors = [
-                '.price', '.cost', '.item-price', '[data-price]',
-                '.product-price', '.price-value', '[data-testid="price"]',
-                '.price-text', '.cost-text', '.price-current',
-                '.price-main', '.price-amount'
-            ]
+            price_elem = await element.query_selector('.price, .cost, .item-price, [data-price], .product-price')
+            price_text = await price_elem.text_content() if price_elem else "0"
+            price = self._extract_price(price_text)
             
-            price = None
-            for selector in price_selectors:
-                try:
-                    price_elem = await element.query_selector(selector)
-                    if price_elem:
-                        price_text = await price_elem.text_content()
-                        if price_text:
-                            price = self._extract_price(price_text)
-                            if price:
-                                break
-                except:
-                    continue
-                    
             # URL товара
-            link_selectors = [
-                'a[href]', '.product-link', '.item-link',
-                '[data-testid="product-link"]', '.link', '.product-name-link',
-                '.item-name-link', '.card-link'
-            ]
-            
-            url = ""
-            for selector in link_selectors:
-                try:
-                    link_elem = await element.query_selector(selector)
-                    if link_elem:
-                        href = await link_elem.get_attribute('href')
-                        if href:
-                            url = href
-                            break
-                except:
-                    continue
-                    
+            link_elem = await element.query_selector('a[href]')
+            url = await link_elem.get_attribute('href') if link_elem else ""
             if url and not url.startswith('http'):
                 url = urljoin(self.base_url, url)
                 
             # Изображение
-            img_selectors = [
-                'img[src]', 'img[data-src]', 'img[data-lazy-src]',
-                '.product-image img', '.item-image img', '[data-testid="product-image"]',
-                '.product-photo img', '.item-photo img', '.card-image img',
-                '.product-img img', '.item-img img'
-            ]
-            
-            image_url = ""
-            for selector in img_selectors:
-                try:
-                    img_elem = await element.query_selector(selector)
-                    if img_elem:
-                        src = await img_elem.get_attribute('src')
-                        data_src = await img_elem.get_attribute('data-src')
-                        lazy_src = await img_elem.get_attribute('data-lazy-src')
-                        image_url = src or data_src or lazy_src or ""
-                        if image_url:
-                            break
-                except:
-                    continue
-                    
+            img_elem = await element.query_selector('img[src], img[data-src]')
+            image_url = await img_elem.get_attribute('src') or await img_elem.get_attribute('data-src') if img_elem else ""
             if image_url and not image_url.startswith('http'):
                 image_url = urljoin(self.base_url, image_url)
                 
@@ -344,36 +237,15 @@ class VkusvillScraper(BaseScraper):
             await self.random_delay(2, 4)
             
             # Ждем загрузки страницы
-            page_selectors = [
-                '.product-info', '.item-details', '.product-details',
-                '.product-page', '.item-page', '[data-testid="product-page"]',
-                '.product-content', '.item-content', '.product-main',
-                '.item-main', '.product-detail', '.item-detail'
-            ]
+            await self.page.wait_for_selector('.product-info, .item-details, .product-details, .product-page', timeout=10000)
             
-            page_loaded = False
-            for selector in page_selectors:
-                try:
-                    await self.page.wait_for_selector(selector, timeout=10000)
-                    page_loaded = True
-                    break
-                except:
-                    continue
-                    
-            if not page_loaded:
-                # Пробуем найти любую информацию о продукте
-                await self.page.wait_for_selector('img, .product, .item, h1, .product-header', timeout=15000)
-                
             # Извлекаем детальную информацию
             product_data = {}
             
             # Калории и БЖУ
             nutrition_selectors = [
                 '.nutrition-info', '.calories', '.nutrition', '[data-nutrition]',
-                '.kcal', '.protein', '.fat', '.carbohydrates', '.nutrition-table',
-                '.calories-info', '.energy-info', '[data-testid="nutrition"]',
-                '.nutrition-facts', '.nutrition-data', '.nutrition-details',
-                '.calories-value', '.protein-value', '.fat-value', '.carb-value'
+                '.kcal', '.protein', '.fat', '.carbohydrates', '.nutrition-table'
             ]
             
             for selector in nutrition_selectors:
@@ -407,9 +279,7 @@ class VkusvillScraper(BaseScraper):
             # Состав
             composition_selectors = [
                 '.composition', '.ingredients', '.ingredient-list', '[data-composition]',
-                '.product-composition', '.item-composition', '.ingredients-list',
-                '[data-testid="composition"]', '.composition-text', '.ingredients-text',
-                '.composition-info', '.ingredients-info', '.composition-details'
+                '.product-composition', '.item-composition', '.ingredients-info'
             ]
             
             for selector in composition_selectors:
@@ -426,9 +296,7 @@ class VkusvillScraper(BaseScraper):
             # Масса порции
             weight_selectors = [
                 '.weight', '.portion', '.size', '[data-weight]', '.product-weight',
-                '.item-weight', '.weight-info', '.weight-text', '.portion-weight',
-                '[data-testid="weight"]', '.weight-value', '.weight-amount',
-                '.portion-size', '.size-weight', '.weight-details'
+                '.item-weight', '.weight-info', '.package-weight'
             ]
             
             for selector in weight_selectors:
@@ -450,9 +318,7 @@ class VkusvillScraper(BaseScraper):
             # Бренд
             brand_selectors = [
                 '.brand', '.manufacturer', '.producer', '[data-brand]',
-                '.product-brand', '.item-brand', '.brand-name', '.brand-text',
-                '[data-testid="brand"]', '.brand-info', '.brand-details',
-                '.manufacturer-name', '.producer-name', '.brand-value'
+                '.product-brand', '.item-brand', '.brand-name'
             ]
             
             for selector in brand_selectors:
@@ -470,9 +336,7 @@ class VkusvillScraper(BaseScraper):
             tags = []
             tag_selectors = [
                 '.tags .tag', '.badges .badge', '.labels .label',
-                '[data-tag]', '.product-tags .tag', '.tag-item',
-                '.badge-item', '.label-item', '[data-testid="tag"]',
-                '.tag-list .tag', '.badge-list .badge', '.label-list .label'
+                '[data-tag]', '.product-tags .tag', '.product-badges .badge'
             ]
             
             for selector in tag_selectors:
@@ -523,12 +387,12 @@ class VkusvillScraper(BaseScraper):
                         return f"vkusvill:{part}"
                         
             # Пробуем извлечь из data-атрибутов
-            data_id = await element.get_attribute('data-id')
+            data_id = asyncio.run(element.get_attribute('data-id'))
             if data_id:
                 return f"vkusvill:{data_id}"
                 
             # Пробуем извлечь из href
-            href = await element.get_attribute('href')
+            href = asyncio.run(element.get_attribute('href'))
             if href:
                 href_parts = href.split('/')
                 for part in href_parts:
