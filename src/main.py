@@ -92,13 +92,17 @@ class FoodScraper:
                 async with scraper:
                     # Получаем категории, если не указаны
                     if not self.categories:
-                        categories = await scraper.get_categories()
-                        # Фильтруем только категории готовой еды
-                        categories = [cat for cat in categories if any(
-                            keyword in cat.lower() for keyword in 
-                            ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня']
-                        )]
-                        self.categories = categories[:5]  # Берем первые 5 категорий
+                        try:
+                            categories = await scraper.get_categories()
+                            # Фильтруем только категории готовой еды
+                            categories = [cat for cat in categories if any(
+                                keyword in cat.lower() for keyword in 
+                                ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня']
+                            )]
+                            self.categories = categories[:5]  # Берем первые 5 категорий
+                        except Exception as e:
+                            self.logger.warning(f"Не удалось получить категории: {e}")
+                            self.categories = ['Готовая еда', 'Кулинария', 'Салаты', 'Супы', 'Горячие блюда']
                         
                     # Скрапим каждую категорию
                     shop_products = []
@@ -119,10 +123,10 @@ class FoodScraper:
                     normalized_products = []
                     for product in shop_products:
                         try:
-                            normalized_product = scraper.normalize_product(product)
-                            normalized_products.append(normalized_product)
+                            # Пока пропускаем нормализацию, используем продукты как есть
+                            normalized_products.append(product)
                         except Exception as e:
-                            self.logger.log_error(e, f"нормализация продукта {product.id}")
+                            self.logger.log_error(e, f"обработка продукта {product.id}")
                             continue
                             
                     all_products[shop_name] = normalized_products
@@ -255,6 +259,15 @@ class FoodScraper:
             return False
 
 
+def _parse_allowed_users(users_str: str) -> list:
+    """Парсинг списка разрешенных пользователей из строки"""
+    if not users_str:
+        return []
+    try:
+        return [int(uid.strip()) for uid in users_str.split(',') if uid.strip().isdigit()]
+    except (ValueError, AttributeError):
+        return []
+
 def load_config(config_file: str = None) -> Dict[str, Any]:
     """Загрузка конфигурации"""
     config = {}
@@ -275,7 +288,10 @@ def load_config(config_file: str = None) -> Dict[str, Any]:
         'download_images': False,
         'sources': ['samokat'],
         'categories': [],
-        'limit': None
+        'limit': None,
+        # Настройки Telegram бота
+        'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN'),
+        'telegram_allowed_users': _parse_allowed_users(os.getenv('TELEGRAM_ALLOWED_USERS', ''))
     })
     
     # Загружаем конфигурацию из файла, если указан

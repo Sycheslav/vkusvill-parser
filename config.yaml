@@ -20,7 +20,7 @@ limit: null
 download_images: false
 
 # Настройки браузера
-headless: true
+headless: false
 max_concurrent: 2
 
 # Тайминги и ограничения
@@ -70,3 +70,9 @@ image_formats:
   - jpg
   - png
   - webp
+
+# Настройки Telegram бота
+telegram_bot_token: "YOUR_BOT_TOKEN_HERE"  # Замените на ваш токен от @BotFather
+telegram_allowed_users: []  # Список разрешенных пользователей (пусто = доступ для всех)
+telegram_bot_name: "Food Scraper Bot"
+telegram_bot_description: "Бот для парсинга готовой еды из сервисов доставки"

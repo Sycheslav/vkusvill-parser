@@ -26,7 +26,7 @@ class SamokatScraper(BaseScraper):
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.base_url = "https://eda.samokat.ru"
+        self.base_url = "https://samokat.ru/eda"
         self.city = config.get('city', 'Москва')
         self.coords = config.get('coords')
         self.session_id = None
@@ -192,7 +192,7 @@ class SamokatScraper(BaseScraper):
                 image_url = urljoin(self.base_url, image_url)
                 
             # ID товара (из URL или data-атрибута)
-            product_id = self._extract_product_id(url, element)
+            product_id = await self._extract_product_id(url, element)
             
             # Создаем базовый продукт
             product = ScrapedProduct(
@@ -377,7 +377,7 @@ class SamokatScraper(BaseScraper):
             return float(price_match.group(1).replace(',', '.'))
         return None
         
-    def _extract_product_id(self, url: str, element) -> str:
+    async def _extract_product_id(self, url: str, element) -> str:
         """Извлечь ID продукта"""
         try:
             # Пробуем извлечь из URL
@@ -388,18 +388,24 @@ class SamokatScraper(BaseScraper):
                         return f"samokat:{part}"
                         
             # Пробуем извлечь из data-атрибутов
-            data_id = asyncio.run(element.get_attribute('data-id'))
-            if data_id:
-                return f"samokat:{data_id}"
+            try:
+                data_id = await element.get_attribute('data-id')
+                if data_id:
+                    return f"samokat:{data_id}"
+            except:
+                pass
                 
             # Пробуем извлечь из href
-            href = asyncio.run(element.get_attribute('href'))
-            if href:
-                href_parts = href.split('/')
-                for part in href_parts:
-                    if part and part.isdigit():
-                        return f"samokat:{part}"
-                        
+            try:
+                href = await element.get_attribute('href')
+                if href:
+                    href_parts = href.split('/')
+                    for part in href_parts:
+                        if part and part.isdigit():
+                            return f"samokat:{part}"
+            except:
+                pass
+                
         except:
             pass
             

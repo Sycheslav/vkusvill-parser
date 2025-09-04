@@ -35,6 +35,10 @@ test: ## Запустить тесты
 	@echo "$(GREEN)Запускаем тесты...$(NC)"
 	$(PYTEST) tests/ -v
 
+test-bot: ## Тестировать Telegram бота
+	@echo "$(GREEN)Тестируем Telegram бота...$(NC)"
+	$(PYTHON) test_telegram_bot.py
+
 test-coverage: ## Запустить тесты с покрытием
 	@echo "$(GREEN)Запускаем тесты с покрытием...$(NC)"
 	$(PYTEST) tests/ --cov=src --cov-report=html --cov-report=term
@@ -98,6 +102,29 @@ docker-run-all: ## Запустить скрапинг всех источник
 docker-compose-up: ## Запустить через docker-compose
 	@echo "$(GREEN)Запускаем через docker-compose...$(NC)"
 	docker-compose up food-scraper
+
+# Команды для Telegram бота
+run-bot: ## Запустить Telegram бота
+	@echo "$(GREEN)Запускаем Telegram бота...$(NC)"
+	@echo "$(YELLOW)Убедитесь, что в config.yaml указан telegram_bot_token!$(NC)"
+	$(PYTHON) run_telegram_bot.py
+
+run-bot-dev: ## Запустить Telegram бота в режиме разработки
+	@echo "$(GREEN)Запускаем Telegram бота в режиме разработки...$(NC)"
+	@echo "$(YELLOW)Убедитесь, что в config.yaml указан telegram_bot_token!$(NC)"
+	$(PYTHON) run_telegram_bot.py --dev
+
+install-bot: ## Установить зависимости для Telegram бота
+	@echo "$(GREEN)Устанавливаем зависимости для Telegram бота...$(NC)"
+	$(PIP) install python-telegram-bot==20.7
+	@echo "$(GREEN)Зависимости для бота установлены!$(NC)"
+
+bot-setup: ## Настройка Telegram бота
+	@echo "$(GREEN)Настройка Telegram бота...$(NC)"
+	@echo "$(YELLOW)1. Создайте бота через @BotFather в Telegram$(NC)"
+	@echo "$(YELLOW)2. Получите токен бота$(NC)"
+	@echo "$(YELLOW)3. Добавьте токен в config.yaml или .env файл$(NC)"
+	@echo "$(YELLOW)4. Запустите бота командой: make run-bot$(NC)"
 
 docker-compose-samokat: ## Запустить скрапинг Самоката через docker-compose
 	@echo "$(GREEN)Запускаем скрапинг Самоката через docker-compose...$(NC)"

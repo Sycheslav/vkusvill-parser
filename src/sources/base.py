@@ -82,48 +82,22 @@ class BaseScraper(ABC):
         """Настройка браузера Playwright"""
         try:
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,
-                args=[
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-web-security',
-                    '--disable-features=VizDisplayCompositor'
-                ]
+            self.browser = await self.playwright.webkit.launch(
+                headless=self.headless
             )
             
-            # Создаем контекст с stealth-настройками
+            # Создаем контекст с базовыми настройками
             self.context = await self.browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 locale='ru-RU',
-                timezone_id='Europe/Moscow',
-                extra_http_headers={
-                    'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
+                timezone_id='Europe/Moscow'
             )
             
             # Создаем страницу
             self.page = await self.context.new_page()
             
-            # Устанавливаем stealth-скрипты
-            await self.page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined,
-                });
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5],
-                });
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['ru-RU', 'ru', 'en-US', 'en'],
-                });
-            """)
+            # Базовые настройки страницы
+            await self.page.set_viewport_size({'width': 1920, 'height': 1080})
             
             self.logger.info(f"Браузер {self.__class__.__name__} успешно настроен")
             
@@ -148,9 +122,10 @@ class BaseScraper(ABC):
             
     async def random_delay(self, min_delay: float = None, max_delay: float = None):
         """Случайная задержка для имитации человеческого поведения"""
+        import random
         min_delay = min_delay or self.throttle_min
         max_delay = max_delay or self.throttle_max
-        delay = asyncio.random() * (max_delay - min_delay) + min_delay
+        delay = random.random() * (max_delay - min_delay) + min_delay
         await asyncio.sleep(delay)
         
     @abstractmethod

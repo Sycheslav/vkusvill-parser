@@ -13,3 +13,4 @@ retry==0.9.2
 pillow==10.1.0
 pytest==7.4.3
 pytest-asyncio==0.21.1
+python-telegram-bot==20.7
