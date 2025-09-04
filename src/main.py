@@ -41,6 +41,9 @@ class FoodScraper:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = ScraperLogger("food_scraper", config.get('log_file'))
+        
+        self.logger.info(f"[MAIN] FoodScraper.__init__ вызван с конфигом: {config}")
+        
         self.storage = DataStorage(config.get('db_path', 'data/out/products.db'))
         self.image_downloader = ImageDownloader(config.get('images_dir', 'data/images'))
         
@@ -51,12 +54,17 @@ class FoodScraper:
         self.limit = config.get('limit')
         self.download_images = config.get('download_images', False)
         
+        self.logger.info(f"[MAIN] Настройки загружены: city={self.city}, coords={self.coords}, categories={self.categories}, limit={self.limit}")
+        
         # Инициализация скрейперов
         self.scrapers = {}
+        self.logger.info(f"[MAIN] Инициализируем скрейперы...")
         self._init_scrapers()
         
     def _init_scrapers(self):
         """Инициализация скрейперов"""
+        self.logger.info(f"[MAIN] _init_scrapers вызван")
+        
         scraper_config = {
             'city': self.city,
             'coords': self.coords,
@@ -66,73 +74,130 @@ class FoodScraper:
             'throttle_max': self.config.get('throttle_max', 2.0),
         }
         
-        # Создаем скрейперы для указанных источников
-        sources = self.config.get('sources', ['samokat'])
+        self.logger.info(f"[MAIN] Конфигурация скрейпера: {scraper_config}")
         
+        # Создаем скрейперы для указанных источников
+        sources = self.config.get('sources', ['samokat', 'lavka', 'vkusvill'])
+        self.logger.info(f"[MAIN] Инициализируем скрейперы для источников: {sources}")
+        
+        # Убеждаемся, что все источники включены
         if 'samokat' in sources:
-            self.scrapers['samokat'] = SamokatScraper(scraper_config)
+            try:
+                self.logger.info(f"[MAIN] Создаем SamokatScraper...")
+                self.scrapers['samokat'] = SamokatScraper(scraper_config)
+                self.logger.info(f"[MAIN] Самокат скрейпер создан: {self.scrapers['samokat']}")
+                self.logger.info(f"[MAIN] Тип: {type(self.scrapers['samokat'])}")
+            except Exception as e:
+                self.logger.error(f"[MAIN] Ошибка инициализации Самокат скрейпера: {e}")
+                self.logger.error(f"[MAIN] Traceback: ", exc_info=True)
             
         if 'lavka' in sources:
-            self.scrapers['lavka'] = LavkaScraper(scraper_config)
+            try:
+                self.logger.info(f"[MAIN] Создаем LavkaScraper...")
+                self.scrapers['lavka'] = LavkaScraper(scraper_config)
+                self.logger.info(f"[MAIN] Лавка скрейпер создан: {self.scrapers['lavka']}")
+                self.logger.info(f"[MAIN] Тип: {type(self.scrapers['lavka'])}")
+            except Exception as e:
+                self.logger.error(f"[MAIN] Ошибка инициализации Лавка скрейпера: {e}")
+                self.logger.error(f"[MAIN] Traceback: ", exc_info=True)
             
         if 'vkusvill' in sources:
-            self.scrapers['vkusvill'] = VkusvillScraper(scraper_config)
+            try:
+                self.logger.info(f"[MAIN] Создаем VkusvillScraper...")
+                self.scrapers['vkusvill'] = VkusvillScraper(scraper_config)
+                self.logger.info(f"[MAIN] ВкусВилл скрейпер инициализирован: {self.scrapers['vkusvill']}")
+                self.logger.info(f"[MAIN] Тип: {type(self.scrapers['vkusvill'])}")
+            except Exception as e:
+                self.logger.error(f"[MAIN] Ошибка инициализации ВкусВилл скрейпера: {e}")
+                self.logger.error(f"[MAIN] Traceback: ", exc_info=True)
             
-        self.logger.info(f"Инициализированы скрейперы: {list(self.scrapers.keys())}")
+        if not self.scrapers:
+            self.logger.error("[MAIN] Не удалось инициализировать ни одного скрейпера!")
+            raise Exception("Не удалось инициализировать ни одного скрейпера!")
+        else:
+            self.logger.info(f"[MAIN] Инициализированы скрейперы: {list(self.scrapers.keys())}")
+            for name, scraper in self.scrapers.items():
+                self.logger.info(f"[MAIN] {name}: {scraper} (тип: {type(scraper)})")
         
     async def scrape_all(self) -> Dict[str, List]:
         """Скрапинг всех источников"""
         all_products = {}
+        
+        self.logger.info(f"[MAIN] scrape_all вызван. Количество скрейперов: {len(self.scrapers)}")
+        self.logger.info(f"[MAIN] Скрейперы: {list(self.scrapers.keys())}")
+        
+        if not self.scrapers:
+            self.logger.error("[MAIN] Нет доступных скрейперов для работы!")
+            return all_products
         
         for shop_name, scraper in self.scrapers.items():
             try:
                 self.logger.log_scraping_start(shop_name, self.categories)
                 start_time = time.time()
                 
-                async with scraper:
-                    # Получаем категории, если не указаны
-                    if not self.categories:
-                        try:
-                            categories = await scraper.get_categories()
-                            # Фильтруем только категории готовой еды
-                            categories = [cat for cat in categories if any(
-                                keyword in cat.lower() for keyword in 
-                                ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня']
-                            )]
-                            self.categories = categories[:5]  # Берем первые 5 категорий
-                        except Exception as e:
-                            self.logger.warning(f"Не удалось получить категории: {e}")
-                            self.categories = ['Готовая еда', 'Кулинария', 'Салаты', 'Супы', 'Горячие блюда']
+                self.logger.info(f"[MAIN] Обрабатываем {shop_name}")
+                self.logger.info(f"[MAIN] Тип скрейпера: {type(scraper)}")
+                self.logger.info(f"[MAIN] Скрейпер: {scraper}")
+                
+                try:
+                    self.logger.info(f"[MAIN] Входим в контекстный менеджер для {shop_name}")
+                    async with scraper:
+                        self.logger.info(f"[MAIN] Контекстный менеджер для {shop_name} инициализирован")
                         
-                    # Скрапим каждую категорию
-                    shop_products = []
-                    for category in self.categories:
-                        self.logger.log_category_start(category, shop_name)
+                        # Получаем категории, если не указаны
+                        if not self.categories:
+                            try:
+                                self.logger.info(f"[MAIN] Получаем категории для {shop_name}...")
+                                self.logger.info(f"[MAIN] Вызываем scraper.get_categories()")
+                                categories = await scraper.get_categories()
+                                self.logger.info(f"[MAIN] Категории получены: {categories}")
+                                
+                                # Фильтруем только категории готовой еды
+                                filtered_categories = [cat for cat in categories if any(
+                                    keyword in cat.lower() for keyword in 
+                                    ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня', 'кулинар']
+                                )]
+                                self.categories = filtered_categories[:5]  # Берем первые 5 категорий
+                                self.logger.info(f"[MAIN] Найдены категории для {shop_name}: {self.categories}")
+                            except Exception as e:
+                                self.logger.warning(f"[MAIN] Не удалось получить категории для {shop_name}: {e}")
+                                self.logger.warning(f"[MAIN] Traceback: ", exc_info=True)
+                                self.categories = ['Готовая еда', 'Кулинария', 'Салаты', 'Супы', 'Горячие блюда']
+                            
+                        # Скрапим каждую категорию
+                        shop_products = []
+                        for category in self.categories:
+                            self.logger.log_category_start(category, shop_name)
+                            
+                            try:
+                                self.logger.info(f"Парсим категорию '{category}' в {shop_name}...")
+                                category_products = await scraper.scrape_category(category, self.limit)
+                                shop_products.extend(category_products)
+                                
+                                self.logger.log_category_complete(category, shop_name, len(category_products))
+                                
+                            except Exception as e:
+                                self.logger.log_error(e, f"категория {category} в {shop_name}")
+                                continue
+                                
+                        # Нормализуем продукты
+                        normalized_products = []
+                        for product in shop_products:
+                            try:
+                                # Пока пропускаем нормализацию, используем продукты как есть
+                                normalized_products.append(product)
+                            except Exception as e:
+                                self.logger.log_error(e, f"обработка продукта {getattr(product, 'id', 'unknown')}")
+                                continue
+                                
+                        all_products[shop_name] = normalized_products
                         
-                        try:
-                            category_products = await scraper.scrape_category(category, self.limit)
-                            shop_products.extend(category_products)
-                            
-                            self.logger.log_category_complete(category, shop_name, len(category_products))
-                            
-                        except Exception as e:
-                            self.logger.log_error(e, f"категория {category}")
-                            continue
-                            
-                    # Нормализуем продукты
-                    normalized_products = []
-                    for product in shop_products:
-                        try:
-                            # Пока пропускаем нормализацию, используем продукты как есть
-                            normalized_products.append(product)
-                        except Exception as e:
-                            self.logger.log_error(e, f"обработка продукта {product.id}")
-                            continue
-                            
-                    all_products[shop_name] = normalized_products
-                    
-                    duration = time.time() - start_time
-                    self.logger.log_scraping_complete(shop_name, len(normalized_products), duration)
+                        duration = time.time() - start_time
+                        self.logger.log_scraping_complete(shop_name, len(normalized_products), duration)
+                        
+                except Exception as e:
+                    self.logger.error(f"Ошибка инициализации браузера для {shop_name}: {e}")
+                    all_products[shop_name] = []
                     
             except Exception as e:
                 self.logger.log_error(e, f"скрейпинг {shop_name}")
@@ -144,12 +209,24 @@ class FoodScraper:
         """Сохранение всех продуктов в базу данных"""
         total_saved = 0
         
+        if not all_products:
+            self.logger.warning("Нет продуктов для сохранения")
+            return total_saved
+        
         for shop_name, products in all_products.items():
-            if products:
-                saved_count = self.storage.save_products(products)
-                total_saved += saved_count
-                self.logger.info(f"Сохранено {saved_count} продуктов из {shop_name}")
+            try:
+                if products and len(products) > 0:
+                    self.logger.info(f"Сохраняем {len(products)} продуктов из {shop_name}...")
+                    saved_count = self.storage.save_products(products)
+                    total_saved += saved_count
+                    self.logger.info(f"Сохранено {saved_count} продуктов из {shop_name}")
+                else:
+                    self.logger.warning(f"Нет продуктов для сохранения из {shop_name}")
+            except Exception as e:
+                self.logger.error(f"Ошибка сохранения продуктов из {shop_name}: {e}")
+                continue
                 
+        self.logger.info(f"Всего сохранено продуктов: {total_saved}")
         return total_saved
         
     async def download_images(self, all_products: Dict[str, List]) -> int:
@@ -211,11 +288,24 @@ class FoodScraper:
             self.logger.info(f"Город: {self.city}")
             if self.coords:
                 self.logger.info(f"Координаты: {self.coords}")
+            self.logger.info(f"Источники: {', '.join(self.config.get('sources', ['samokat']))}")
             self.logger.info(f"Категории: {', '.join(self.categories) if self.categories else 'автоопределение'}")
             self.logger.info(f"Лимит: {self.limit or 'без ограничений'}")
             self.logger.info(f"Загрузка изображений: {'включена' if self.download_images else 'отключена'}")
             
+            # Проверяем доступность скрейперов
+            if not self.scrapers:
+                self.logger.error("Нет доступных скрейперов!")
+                return False
+            
+            # Проверяем, что все скрейперы инициализированы правильно
+            for name, scraper in self.scrapers.items():
+                if not scraper:
+                    self.logger.error(f"Скрейпер {name} не инициализирован")
+                    return False
+            
             # Скрапинг
+            self.logger.info("Начинаем скрапинг всех источников...")
             all_products = await self.scrape_all()
             
             # Подсчитываем общее количество продуктов
@@ -224,19 +314,27 @@ class FoodScraper:
             
             if total_products == 0:
                 self.logger.warning("Не удалось собрать ни одного продукта")
+                self.logger.warning("Возможные причины:")
+                self.logger.warning("- Неправильные категории")
+                self.logger.warning("- Проблемы с доступом к сайтам")
+                self.logger.warning("- Изменения в структуре сайтов")
+                self.logger.warning("- Блокировка со стороны сайтов")
                 return False
                 
             # Сохранение в базу данных
+            self.logger.info("Сохраняем продукты в базу данных...")
             saved_count = await self.save_products(all_products)
             self.logger.info(f"Сохранено в базу данных: {saved_count}")
             
             # Загрузка изображений
             if self.download_images:
+                self.logger.info("Загружаем изображения...")
                 downloaded_count = await self.download_images(all_products)
                 self.logger.info(f"Загружено изображений: {downloaded_count}")
                 
             # Экспорт данных
             if output_file:
+                self.logger.info(f"Экспортируем данные в {output_file}...")
                 export_success = await self.export_data(output_file, all_products)
                 if export_success:
                     self.logger.info(f"Данные экспортированы в: {output_file}")
@@ -244,12 +342,18 @@ class FoodScraper:
                     self.logger.error("Ошибка экспорта данных")
                     
             # Выводим статистику
-            stats = self.storage.get_statistics()
-            self.logger.info(f"Статистика базы данных: {stats}")
+            try:
+                stats = self.storage.get_statistics()
+                self.logger.info(f"Статистика базы данных: {stats}")
+            except Exception as e:
+                self.logger.warning(f"Не удалось получить статистику БД: {e}")
             
             if self.download_images:
-                img_stats = self.image_downloader.get_images_statistics()
-                self.logger.info(f"Статистика изображений: {img_stats}")
+                try:
+                    img_stats = self.image_downloader.get_images_statistics()
+                    self.logger.info(f"Статистика изображений: {img_stats}")
+                except Exception as e:
+                    self.logger.warning(f"Не удалось получить статистику изображений: {e}")
                 
             self.logger.info("Скрапинг завершен успешно")
             return True
@@ -286,9 +390,9 @@ def load_config(config_file: str = None) -> Dict[str, Any]:
         'db_path': 'data/out/products.db',
         'images_dir': 'data/images',
         'download_images': False,
-        'sources': ['samokat'],
+        'sources': ['samokat', 'lavka', 'vkusvill'],
         'categories': [],
-        'limit': None,
+        'limit': 500,  # Увеличиваем лимит по умолчанию
         # Настройки Telegram бота
         'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN'),
         'telegram_allowed_users': _parse_allowed_users(os.getenv('TELEGRAM_ALLOWED_USERS', ''))
@@ -310,11 +414,11 @@ def load_config(config_file: str = None) -> Dict[str, Any]:
 @click.command()
 @click.option('--source', '-s', multiple=True, 
               type=click.Choice(['samokat', 'lavka', 'vkusvill', 'all']),
-              default=['samokat'], help='Источники для скрапинга')
+              default=['samokat', 'lavka', 'vkusvill'], help='Источники для скрапинга')
 @click.option('--city', '-c', default='Москва', help='Город для поиска')
 @click.option('--coords', help='Координаты (широта,долгота)')
 @click.option('--category', '-cat', multiple=True, help='Категории для скрапинга')
-@click.option('--limit', '-l', type=int, help='Максимальное количество продуктов')
+@click.option('--limit', '-l', type=int, default=500, help='Максимальное количество продуктов (по умолчанию: 500)')
 @click.option('--download-images', '-i', is_flag=True, help='Загружать изображения')
 @click.option('--out', '-o', help='Файл для экспорта данных')
 @click.option('--config', help='Файл конфигурации YAML')
@@ -330,6 +434,9 @@ def main(source, city, coords, category, limit, download_images, out, config, co
     if source and 'all' not in source:
         config_dict['sources'] = list(source)
     elif 'all' in source:
+        config_dict['sources'] = ['samokat', 'lavka', 'vkusvill']
+    else:
+        # Если источники не указаны, используем все доступные
         config_dict['sources'] = ['samokat', 'lavka', 'vkusvill']
         
     if city:

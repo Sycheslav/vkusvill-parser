@@ -7,8 +7,8 @@ coords: null  # "55.751244,37.618423" для Москвы
 # Источники для скрапинга
 sources:
   - samokat
-  # - lavka
-  # - vkusvill
+  - lavka
+  - vkusvill
 
 # Категории для скрапинга (пусто = автоопределение)
 categories: []
@@ -20,12 +20,12 @@ limit: null
 download_images: false
 
 # Настройки браузера
-headless: false
-max_concurrent: 2
+headless: true  # true = скрытый браузер для ускорения
+max_concurrent: 4  # Увеличиваем количество одновременных процессов
 
 # Тайминги и ограничения
-throttle_min: 1.0
-throttle_max: 2.0
+throttle_min: 0.5  # Уменьшаем задержки для ускорения
+throttle_max: 1.0
 
 # Пути к файлам
 log_file: "data/out/scraper.log"
@@ -45,8 +45,8 @@ cookies_file: null
 user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Настройки таймаутов
-timeout_page_load: 30000
-timeout_element_wait: 10000
+timeout_page_load: 60000  # Увеличиваем таймаут загрузки страницы
+timeout_element_wait: 20000  # Увеличиваем таймаут ожидания элементов
 
 # Настройки повторных попыток
 max_retries: 3
@@ -72,7 +72,7 @@ image_formats:
   - webp
 
 # Настройки Telegram бота
-telegram_bot_token: "YOUR_BOT_TOKEN_HERE"  # Замените на ваш токен от @BotFather
+telegram_bot_token: "7657488971:AAFNaNjweijtQO6_LQrZ0RJRyEvnLUBkTM4"  # Замените на ваш токен от @BotFather
 telegram_allowed_users: []  # Список разрешенных пользователей (пусто = доступ для всех)
 telegram_bot_name: "Food Scraper Bot"
 telegram_bot_description: "Бот для парсинга готовой еды из сервисов доставки"

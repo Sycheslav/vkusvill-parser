@@ -1,4 +1,4 @@
-.PHONY: help install test clean run-samokat run-all docker-build docker-run
+.PHONY: help install test clean run-samokat run-all test-all-sources run-bot docker-build docker-run
 
 # Переменные
 PYTHON = python3
@@ -82,6 +82,26 @@ run-all: ## Запустить скрапинг всех источников
 run-all-with-images: ## Запустить скрапинг всех источников с загрузкой изображений
 	@echo "$(GREEN)Запускаем скрапинг всех источников с изображениями...$(NC)"
 	$(PYTHON) -m src.main --source all --city "Москва" --download-images --out data/out/all_sources.sqlite
+
+test-all-sources: ## Тестирование всех источников
+	@echo "$(GREEN)Тестируем все источники...$(NC)"
+	$(PYTHON) test_all_sources.py
+
+run-bot: ## Запустить Telegram бота
+	@echo "$(GREEN)Запускаем Telegram бота...$(NC)"
+	$(PYTHON) run_bot.py
+
+test-samokat-only: ## Тестирование только Самоката
+	@echo "$(GREEN)Тестируем Самокат...$(NC)"
+	$(PYTHON) -m src.main --source samokat --city "Москва" --limit 10 --out data/out/test_samokat.csv
+
+test-lavka-only: ## Тестирование только Яндекс.Лавки
+	@echo "$(GREEN)Тестируем Яндекс.Лавку...$(NC)"
+	$(PYTHON) -m src.main --source lavka --city "Москва" --limit 10 --out data/out/test_lavka.csv
+
+test-vkusvill-only: ## Тестирование только ВкусВилла
+	@echo "$(GREEN)Тестируем ВкусВилл...$(NC)"
+	$(PYTHON) -m src.main --source vkusvill --city "Москва" --limit 10 --out data/out/test_vkusvill.csv
 
 docker-build: ## Собрать Docker образ
 	@echo "$(GREEN)Собираем Docker образ...$(NC)"
