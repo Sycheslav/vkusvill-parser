@@ -89,19 +89,12 @@ class FoodScraperBot:
         """
         
         keyboard = [
-            [InlineKeyboardButton("🚀 Парсинг Самоката и Вкусвилла", callback_data="scrape_all")],
-            [InlineKeyboardButton("📍 Парсинг по адресу", callback_data="scrape_address")],
-            [InlineKeyboardButton("⚙️ Настройки парсинга", callback_data="scrape_menu")],
-            [InlineKeyboardButton("🧪 Тестирование источников", callback_data="test_sources")],
-            [InlineKeyboardButton("🔍 Отладка Самоката", callback_data="debug_samokat")],
-            [InlineKeyboardButton("🔍 Отладка Лавки", callback_data="debug_lavka")],
-            [InlineKeyboardButton("📊 Выбрать источники", callback_data="sources_menu")],
-            [InlineKeyboardButton("🏷️ Выбрать категории", callback_data="categories_menu")],
-            [InlineKeyboardButton("📈 Статус", callback_data="status")]
+            [InlineKeyboardButton("Парсинг Самоката и Вкусвилла", callback_data="scrape_all")],
+            [InlineKeyboardButton("Настройки", callback_data="scrape_menu")]
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
         
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /help"""
@@ -149,7 +142,7 @@ class FoodScraperBot:
 • SQLite - база данных
         """
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(help_text, )
         
     async def scrape_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /scrape"""
@@ -214,7 +207,6 @@ class FoodScraperBot:
                 "• /scrape_address Санкт-Петербург, Невский проспект, 28\n"
                 "• /scrape_address Екатеринбург, ул. Ленина, 5\n\n"
                 "Бот найдет товары, доступные для доставки по указанному адресу.",
-                parse_mode='Markdown'
             )
             return
         
@@ -225,7 +217,6 @@ class FoodScraperBot:
             f"📍 Парсинг по адресу: {address}\n\n"
             "🔍 Ищу товары, доступные для доставки по указанному адресу...\n"
             "⏱️ Это может занять несколько минут.",
-            parse_mode='Markdown'
         )
         
         # Создаем конфигурацию для парсинга по адресу
@@ -258,7 +249,6 @@ class FoodScraperBot:
             "• Яндекс.Лавка - продукты и готовая еда\n"
             "• ВкусВилл - фермерские продукты и готовые блюда",
             reply_markup=reply_markup,
-            parse_mode='Markdown'
         )
         
     async def categories_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -275,13 +265,12 @@ class FoodScraperBot:
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "🏷️ *Выберите категории продуктов:*\n\n"
+            "Выберите категории продуктов:\n\n"
             "• Готовые блюда - основные блюда\n"
             "• Салаты - свежие и готовые салаты\n"
             "• Супы - горячие и холодные супы\n"
             "• Кулинария - выпечка и десерты",
             reply_markup=reply_markup,
-            parse_mode='Markdown'
         )
         
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -292,7 +281,7 @@ class FoodScraperBot:
         if user_id in self.active_tasks:
             task_info = self.active_tasks[user_id]
             status_text = f"""
-📊 *Статус задачи:*
+Статус задачи:
 
 🆔 ID: {task_info['task_id']}
 📅 Время запуска: {task_info['start_time']}
@@ -302,9 +291,9 @@ class FoodScraperBot:
 📈 Прогресс: {task_info.get('progress', 'Неизвестно')}
             """
         else:
-            status_text = "📊 *Нет активных задач*\n\nИспользуйте /scrape для запуска парсинга."
+            status_text = "Нет активных задач\n\nИспользуйте /scrape для запуска парсинга."
             
-        await update.message.reply_text(status_text, parse_mode='Markdown')
+        await update.message.reply_text(status_text, )
         
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий на inline кнопки"""
@@ -318,194 +307,57 @@ class FoodScraperBot:
             await self._show_main_menu(query)
         elif data == "scrape_menu":
             await self._show_scrape_menu(query)
-        elif data.startswith("source_"):
-            await self._handle_source_selection(query, data)
-        elif data.startswith("cat_"):
-            await self._handle_category_selection(query, data)
         elif data == "start_scraping":
             await self._start_scraping_from_menu(query, context)
         elif data == "scrape_all":
             await self._start_scraping_all_from_menu(query, context)
-        elif data == "test_sources":
-            await self._show_test_sources_menu(query)
-        elif data.startswith("test_"):
-            await self._handle_test_source(query, context, data)
-        elif data.startswith("debug_"):
-            await self._handle_debug_source(query, context, data)
-        elif data == "status":
-            await self._show_status(query)
             
     async def _show_main_menu(self, query):
         """Показать главное меню"""
         keyboard = [
-            [InlineKeyboardButton("🚀 Парсинг Самоката и Вкусвилла", callback_data="scrape_all")],
-            [InlineKeyboardButton("⚙️ Настройки парсинга", callback_data="scrape_menu")],
-            [InlineKeyboardButton("🧪 Тестирование источников", callback_data="test_sources")],
-            [InlineKeyboardButton("📊 Выбрать источники", callback_data="sources_menu")],
-            [InlineKeyboardButton("🏷️ Выбрать категории", callback_data="categories_menu")],
-            [InlineKeyboardButton("📈 Статус", callback_data="status")]
+            [InlineKeyboardButton("Парсинг Самоката и Вкусвилла", callback_data="scrape_all")],
+            [InlineKeyboardButton("Настройки", callback_data="scrape_menu")]
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "🤖 *Главное меню*\n\nВыберите действие:",
+            "Главное меню\n\nВыберите действие:",
             reply_markup=reply_markup,
-            parse_mode='Markdown'
         )
         
     async def _show_scrape_menu(self, query):
         """Показать меню парсинга"""
         keyboard = [
-            [InlineKeyboardButton("🚀 Запустить парсинг", callback_data="start_scraping")],
-            [InlineKeyboardButton("📊 Выбрать источники", callback_data="sources_menu")],
-            [InlineKeyboardButton("🏷️ Выбрать категории", callback_data="categories_menu")],
+            [InlineKeyboardButton("Запустить парсинг", callback_data="start_scraping")],
             [InlineKeyboardButton("Назад", callback_data="main_menu")]
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "⚙️ *Настройки парсинга*\n\n"
+            "Настройки парсинга\n\n"
             "Текущие настройки:\n"
             f"📍 Город: {self.config.get('city', 'Москва')}\n"
             f"🔍 Источники: {', '.join(self.config.get('sources', ['samokat', 'lavka', 'vkusvill']))}\n"
             f"🏷️ Категории: {', '.join(self.config.get('categories', [])) or 'Автоопределение'}\n\n"
             "Выберите действие:",
             reply_markup=reply_markup,
-            parse_mode='Markdown'
         )
         
-    async def _handle_source_selection(self, query, data):
-        """Обработка выбора источников"""
-        source = data.replace("source_", "")
-        
-        if source == "all":
-            self.config['sources'] = ['samokat', 'lavka', 'vkusvill']
-        else:
-            if source not in self.config.get('sources', []):
-                self.config['sources'] = [source]
-            else:
-                self.config['sources'].remove(source)
-                
-        # Показываем обновленное меню
-        await self._show_scrape_menu(query)
-        
-    async def _show_test_sources_menu(self, query):
-        """Показать меню тестирования источников"""
-        keyboard = [
-            [InlineKeyboardButton("🧪 Тест Самоката", callback_data="test_samokat")],
-            [InlineKeyboardButton("🧪 Тест Яндекс.Лавки", callback_data="test_lavka")],
-            [InlineKeyboardButton("🧪 Тест ВкусВилла", callback_data="test_vkusvill")],
-            [InlineKeyboardButton("Назад", callback_data="main_menu")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            "🧪 *Тестирование источников*\n\n"
-            "Выберите источник для тестирования:\n\n"
-            "• *Самокат* - готовые блюда и кулинария\n"
-            "• *Яндекс.Лавка* - продукты и готовая еда\n"
-            "• *ВкусВилл* - фермерские продукты и готовые блюда\n\n"
-            "Тестирование займет 3-5 минут на источник.",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-    async def _handle_category_selection(self, query, data):
-        """Обработка выбора категорий"""
-        category = data.replace("cat_", "")
-        
-        if category == "all":
-            self.config['categories'] = []
-        else:
-            category_map = {
-                "ready_food": "готовые блюда",
-                "salads": "салаты", 
-                "soups": "супы",
-                "cooking": "кулинария"
-            }
-            
-            if category in category_map:
-                cat_name = category_map[category]
-                if cat_name not in self.config.get('categories', []):
-                    self.config['categories'] = [cat_name]
-                else:
-                    self.config['categories'].remove(cat_name)
-                    
-        # Показываем обновленное меню
-        await self._show_scrape_menu(query)
-        
-    async def _handle_test_source(self, query, context, data):
-        """Обработка тестирования отдельного источника"""
-        source = data.replace("test_", "")
-        
-        if source == "samokat":
-            await self._start_test_scraping(query, context, ['samokat'], "Самокат")
-        elif source == "lavka":
-            await self._start_test_scraping(query, context, ['lavka'], "Яндекс.Лавка")
-        elif source == "vkusvill":
-            await self._start_test_scraping(query, context, ['vkusvill'], "ВкусВилл")
-        else:
-            await query.answer("❌ Неизвестный источник для тестирования")
-            
-    async def _handle_debug_source(self, query, context, data):
-        """Обработка отладочных команд"""
-        source = data.replace("debug_", "")
-        
-        if source == "samokat":
-            await self._start_debug_scraping(query, context, ['samokat'], "Самокат")
-        elif source == "lavka":
-            await self._start_debug_scraping(query, context, ['lavka'], "Яндекс.Лавка")
-        else:
-            await query.answer("❌ Неизвестный источник для отладки")
-            
-    async def _start_debug_scraping(self, query, context, sources, source_name):
-        """Запуск отладочного парсинга"""
-        await query.edit_message_text(f"🔍 *Отладка {source_name}...*\n\n" +
-                                    f"🔍 *Источник:* {source_name}\n" +
-                                    f"🏷️ *Категории:* Автоопределение\n" +
-                                    f"📦 *Лимит:* 100 товаров (для отладки)\n" +
-                                    f"🖥️ *Режим:* С отображением браузера\n" +
-                                    f"📝 *Логирование:* Подробное\n" +
-                                    f"⏳ *Время:* Ожидайте, это может занять 3-5 минут")
-        
-        # Создаем конфигурацию для отладки
-        scrape_config = self.config.copy()
-        scrape_config['sources'] = sources
-        scrape_config['limit'] = 100
-        scrape_config['headless'] = False
-        scrape_config['max_concurrent'] = 1
-        
-        # Запускаем отладку
-        await self._start_scraping_with_debug(query, context, scrape_config, source_name)
-            
-    async def _start_test_scraping(self, query, context, sources, source_name):
-        """Запуск тестового парсинга"""
-        await query.edit_message_text(f"🧪 *Тестирование {source_name}...*\n\n" +
-                                    f"🔍 *Источник:* {source_name}\n" +
-                                    f"🏷️ *Категории:* Автоопределение\n" +
-                                    f"⏳ *Время:* Ожидайте, это может занять 3-5 минут")
-        
-        # Создаем конфигурацию для тестирования
-        scrape_config = self.config.copy()
-        scrape_config['sources'] = sources
-        
-        # Запускаем парсинг
-        await self._start_scraping(query, context, scrape_config)
         
     async def _start_scraping_from_menu(self, query, context):
         """Запуск парсинга из меню"""
-        await query.edit_message_text("🚀 *Запуск парсинга...*\n\nПодождите, это может занять несколько минут.")
+        await query.edit_message_text("Запуск парсинга...\n\nПодождите, это может занять несколько минут.")
         
         # Запускаем парсинг
         await self._start_scraping(query, context, self.config)
         
     async def _start_scraping_all_from_menu(self, query, context):
         """Запуск парсинга Самоката и Вкусвилла из меню"""
-        await query.edit_message_text("🚀 *Запуск парсинга Самоката и Вкусвилла...*\n\n" +
-                                    "📊 *Источники:* Самокат, ВкусВилл\n" +
-                                    "🏷️ *Категории:* Автоопределение\n" +
-                                    "📦 *Лимит:* До 500 товаров на категорию\n" +
-                                    "⏳ *Время:* Ожидайте, это может занять 4-8 минут")
+        await query.edit_message_text("Запуск парсинга Самоката и Вкусвилла...\n\n" +
+                                    "Источники: Самокат, ВкусВилл\n" +
+                                    "Категории: Автоопределение\n" +
+                                    "Лимит: До 500 товаров на категорию\n" +
+                                    "Время: Ожидайте, это может занять 4-8 минут")
         
         # Создаем конфигурацию для Самоката и Вкусвилла с оптимизированными настройками
         scrape_config = self.config.copy()
@@ -523,11 +375,11 @@ class FoodScraperBot:
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['samokat']
         
-        await update.message.reply_text("🧪 *Тестирование Самоката*\n\n" +
-                                       "🔍 *Источник:* Самокат\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* До 500 товаров на категорию\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 2-3 минуты")
+        await update.message.reply_text("Тестирование Самоката\n\n" +
+                                       "Источник: Самокат\n" +
+                                       "Категории: Автоопределение\n" +
+                                       "Лимит: До 500 товаров на категорию\n" +
+                                       "Время: Ожидайте, это может занять 2-3 минуты")
         
         # Добавляем оптимизированные настройки
         scrape_config['limit'] = 500
@@ -542,11 +394,11 @@ class FoodScraperBot:
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['lavka']
         
-        await update.message.reply_text("🧪 *Тестирование Яндекс.Лавки*\n\n" +
-                                       "🔍 *Источник:* Яндекс.Лавка\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* До 500 товаров на категорию\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 2-3 минуты")
+        await update.message.reply_text("Тестирование Яндекс.Лавки\n\n" +
+                                       "Источник: Яндекс.Лавка\n" +
+                                       "Категории: Автоопределение\n" +
+                                       "Лимит: До 500 товаров на категорию\n" +
+                                       "Время: Ожидайте, это может занять 2-3 минуты")
         
         # Добавляем оптимизированные настройки
         scrape_config['limit'] = 500
@@ -561,11 +413,11 @@ class FoodScraperBot:
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['vkusvill']
         
-        await update.message.reply_text("🧪 *Тестирование ВкусВилла*\n\n" +
-                                       "🔍 *Источник:* ВкусВилл\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* До 500 товаров на категорию\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 2-3 минуты")
+        await update.message.reply_text("Тестирование ВкусВилла\n\n" +
+                                       "Источник: ВкусВилл\n" +
+                                       "Категории: Автоопределение\n" +
+                                       "Лимит: До 500 товаров на категорию\n" +
+                                       "Время: Ожидайте, это может занять 2-3 минуты")
         
         # Добавляем оптимизированные настройки
         scrape_config['limit'] = 500
@@ -584,13 +436,13 @@ class FoodScraperBot:
         scrape_config['headless'] = False  # Показываем браузер для отладки
         scrape_config['max_concurrent'] = 1  # Один поток для отладки
         
-        await update.message.reply_text("🔍 *Парсинг Самоката с отладкой*\n\n" +
-                                       "🔍 *Источник:* Самокат\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* 100 товаров (для отладки)\n" +
-                                       "🖥️ *Режим:* С отображением браузера\n" +
-                                       "📝 *Логирование:* Подробное\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 3-5 минут")
+        await update.message.reply_text("Парсинг Самоката с отладкой\n\n" +
+                                       "Источник: Самокат\n" +
+                                       "Категории: Автоопределение\n" +
+                                       "Лимит: 100 товаров (для отладки)\n" +
+                                       "Режим: С отображением браузера\n" +
+                                       "Логирование: Подробное\n" +
+                                       "Время: Ожидайте, это может занять 3-5 минут")
         
         # Запускаем парсинг с подробным логированием
         await self._start_scraping_with_debug(update, context, scrape_config, "Самокат")
@@ -605,13 +457,13 @@ class FoodScraperBot:
         scrape_config['headless'] = False  # Показываем браузер для отладки
         scrape_config['max_concurrent'] = 1  # Один поток для отладки
         
-        await update.message.reply_text("🔍 *Парсинг Яндекс Лавки с отладкой*\n\n" +
-                                       "🔍 *Источник:* Яндекс.Лавка\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* 100 товаров (для отладки)\n" +
-                                       "🖥️ *Режим:* С отображением браузера\n" +
-                                       "📝 *Логирование:* Подробное\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 3-5 минут")
+        await update.message.reply_text("Парсинг Яндекс Лавки с отладкой\n\n" +
+                                       "Источник: Яндекс.Лавка\n" +
+                                       "Категории: Автоопределение\n" +
+                                       "Лимит: 100 товаров (для отладки)\n" +
+                                       "Режим: С отображением браузера\n" +
+                                       "Логирование: Подробное\n" +
+                                       "Время: Ожидайте, это может занять 3-5 минут")
         
         # Запускаем парсинг с подробным логированием
         await self._start_scraping_with_debug(update, context, scrape_config, "Яндекс.Лавка")
@@ -663,9 +515,9 @@ class FoodScraperBot:
                 self.logger.info(f"Создаем FoodScraper с конфигом: {scrape_config}")
                 scraper = FoodScraper(scrape_config)
                 self.logger.info(f"Скрейпер {source_name} создан успешно")
-                await message.reply_text(f"✅ *Скрейпер {source_name} создан успешно*")
+                await message.reply_text(f"Скрейпер {source_name} создан успешно")
             except Exception as e:
-                error_msg = f"❌ *Ошибка создания скрейпера {source_name}:* {str(e)}"
+                error_msg = f"Ошибка создания скрейпера {source_name}: {str(e)}"
                 await message.reply_text(error_msg)
                 self.logger.error(f"Ошибка создания скрейпера {source_name}: {e}")
                 import traceback
@@ -676,29 +528,29 @@ class FoodScraperBot:
             try:
                 sources = list(scraper.scrapers.keys())
                 self.logger.info(f"Доступные источники: {sources}")
-                await message.reply_text(f"📊 *Доступные источники:* {', '.join(sources)}")
+                await message.reply_text(f"Доступные источники: {', '.join(sources)}")
                 
                 # Проверяем, есть ли источник в списке (ищем по ключу, а не по названию)
                 source_key = source_name.lower().replace('яндекс.лавка', 'lavka').replace('самокат', 'samokat')
                 self.logger.info(f"Ищем источник '{source_name}' с ключом '{source_key}' в списке {sources}")
                 if source_key not in sources:
-                    error_msg = f"❌ *Источник {source_name} не найден в доступных источниках*"
+                    error_msg = f"Источник {source_name} не найден в доступных источниках"
                     await message.reply_text(error_msg)
                     self.logger.error(f"Источник {source_name} (ключ: {source_key}) не найден в {sources}")
                     return
                     
                 scraper_instance = scraper.scrapers[source_key]
                 if not scraper_instance:
-                    error_msg = f"❌ *Скрейпер {source_name} не инициализирован*"
+                    error_msg = f"Скрейпер {source_name} не инициализирован"
                     await message.reply_text(error_msg)
                     self.logger.error(f"Скрейпер {source_name} (ключ: {source_key}) не инициализирован")
                     return
                     
                 self.logger.info(f"Скрейпер {source_name} инициализирован: {type(scraper_instance).__name__}")
-                await message.reply_text(f"✅ *Скрейпер {source_name} инициализирован*")
+                await message.reply_text(f"Скрейпер {source_name} инициализирован")
                 
             except Exception as e:
-                error_msg = f"❌ *Ошибка проверки скрейпера {source_name}:* {str(e)}"
+                error_msg = f"Ошибка проверки скрейпера {source_name}: {str(e)}"
                 await message.reply_text(error_msg)
                 self.logger.error(f"Ошибка проверки скрейпера {source_name}: {e}")
                 return
@@ -706,20 +558,20 @@ class FoodScraperBot:
             # Получаем категории
             try:
                 self.logger.info(f"Получаем категории для {source_name}")
-                await message.reply_text(f"🔍 *Получение категорий для {source_name}...*")
+                await message.reply_text(f"Получение категорий для {source_name}...")
                 
                 categories = await scraper_instance.get_categories()
                 self.logger.info(f"Получены категории для {source_name}: {categories}")
-                await message.reply_text(f"📋 *Категории {source_name}:*\n" + "\n".join([f"• {cat}" for cat in categories[:5]]))
+                await message.reply_text(f"Категории {source_name}:\n" + "\n".join([f"• {cat}" for cat in categories[:5]]))
                 
                 if not categories:
-                    error_msg = f"❌ *Не удалось получить категории для {source_name}*"
+                    error_msg = f"Не удалось получить категории для {source_name}"
                     await message.reply_text(error_msg)
                     self.logger.error(f"Не удалось получить категории для {source_name}")
                     return
                     
             except Exception as e:
-                error_msg = f"❌ *Ошибка получения категорий {source_name}:* {str(e)}"
+                error_msg = f"Ошибка получения категорий {source_name}: {str(e)}"
                 await message.reply_text(error_msg)
                 self.logger.error(f"Ошибка получения категорий {source_name}: {e}")
                 return
@@ -728,27 +580,27 @@ class FoodScraperBot:
             try:
                 test_category = categories[0]
                 self.logger.info(f"Тестируем парсинг категории '{test_category}' для {source_name}")
-                await message.reply_text(f"🧪 *Тестируем категорию:* {test_category}")
+                await message.reply_text(f"Тестируем категорию: {test_category}")
                 
                 # Инициализируем браузер для скрейпера
                 self.logger.info(f"Инициализируем браузер для {source_name}")
-                await message.reply_text(f"🌐 *Инициализация браузера для {source_name}...*")
+                await message.reply_text(f"Инициализация браузера для {source_name}...")
                 
                 async with scraper_instance:
                     self.logger.info(f"Браузер инициализирован для {source_name}")
-                    await message.reply_text(f"✅ *Браузер готов для {source_name}*")
+                    await message.reply_text(f"Браузер готов для {source_name}")
                     
                     # Запускаем парсинг с подробным логированием
                     products = await self._debug_scrape_category(scraper_instance, test_category, message, source_name)
                 
                 if products:
                     self.logger.info(f"Успешно получено {len(products)} товаров из {source_name}")
-                    await message.reply_text(f"✅ *Успешно получено {len(products)} товаров из {source_name}*")
+                    await message.reply_text(f"Успешно получено {len(products)} товаров из {source_name}")
                     
                     # Показываем первые 3 товара для проверки
                     sample_products = products[:3]
                     for i, product in enumerate(sample_products, 1):
-                        product_info = f"📦 *Товар {i}:*\n" + \
+                        product_info = f"Товар {i}:\n" + \
                                      f"• Название: {product.name}\n" + \
                                      f"• Цена: {product.price} руб.\n" + \
                                      f"• Категория: {product.category}\n" + \
@@ -758,19 +610,19 @@ class FoodScraperBot:
                     # Сохраняем результаты в файл и отправляем
                     await self._save_and_send_debug_results(products, source_name, message, context)
                 else:
-                    error_msg = f"❌ *Не удалось получить товары из {source_name}*"
+                    error_msg = f"Не удалось получить товары из {source_name}"
                     await message.reply_text(error_msg)
                     self.logger.error(f"Не удалось получить товары из {source_name}")
                     
             except Exception as e:
-                error_msg = f"❌ *Ошибка парсинга {source_name}:* {str(e)}"
+                error_msg = f"Ошибка парсинга {source_name}: {str(e)}"
                 await message.reply_text(error_msg)
                 self.logger.error(f"Ошибка парсинга {source_name}: {e}")
                 import traceback
                 self.logger.error(f"Traceback: {traceback.format_exc()}")
                 
         except Exception as e:
-            error_msg = f"❌ *Критическая ошибка в {source_name}:* {str(e)}"
+            error_msg = f"Критическая ошибка в {source_name}: {str(e)}"
             await message.reply_text(error_msg)
             self.logger.error(f"Критическая ошибка в {source_name}: {e}")
             import traceback
@@ -789,18 +641,18 @@ class FoodScraperBot:
             
             # Браузер уже инициализирован в контекстном менеджере
             self.logger.info(f"Браузер готов для парсинга {source_name}")
-            await message.reply_text(f"🔄 *Начинаем парсинг категории '{category}' для {source_name}...*")
+            await message.reply_text(f"Начинаем парсинг категории '{category}' для {source_name}...")
             
             # Настраиваем локацию
             try:
                 self.logger.info(f"Настраиваем локацию для {source_name}")
-                await message.reply_text(f"📍 *Настройка локации для {source_name}...*")
+                await message.reply_text(f"Настройка локации для {source_name}...")
                 await scraper_instance.setup_location()
                 self.logger.info(f"Локация настроена для {source_name}")
-                await message.reply_text(f"✅ *Локация настроена для {source_name}*")
+                await message.reply_text(f"Локация настроена для {source_name}")
             except Exception as e:
                 self.logger.warning(f"Ошибка настройки локации для {source_name}: {e}")
-                await message.reply_text(f"⚠️ *Ошибка настройки локации для {source_name}:* {str(e)}")
+                await message.reply_text(f"Ошибка настройки локации для {source_name}: {str(e)}")
             
             # Запускаем парсинг категории
             try:
@@ -809,20 +661,20 @@ class FoodScraperBot:
                 products = await scraper_instance.scrape_category(category, 10)  # Ограничиваем до 10 для отладки
                 
                 self.logger.info(f"Парсинг завершен для {source_name}. Получено товаров: {len(products)}")
-                await message.reply_text(f"✅ *Парсинг завершен для {source_name}. Получено товаров: {len(products)}*")
+                await message.reply_text(f"Парсинг завершен для {source_name}. Получено товаров: {len(products)}")
                 
                 return products
                 
             except Exception as e:
                 self.logger.error(f"Ошибка парсинга категории '{category}' для {source_name}: {e}")
-                await message.reply_text(f"❌ *Ошибка парсинга категории '{category}' для {source_name}:* {str(e)}")
+                await message.reply_text(f"Ошибка парсинга категории '{category}' для {source_name}: {str(e)}")
                 import traceback
                 self.logger.error(f"Traceback: {traceback.format_exc()}")
                 return []
                 
         except Exception as e:
             self.logger.error(f"Критическая ошибка в _debug_scrape_category для {source_name}: {e}")
-            await message.reply_text(f"❌ *Критическая ошибка в парсинге {source_name}:* {str(e)}")
+            await message.reply_text(f"Критическая ошибка в парсинге {source_name}: {str(e)}")
             import traceback
             self.logger.error(f"Traceback: {traceback.format_exc()}")
             return []
@@ -873,7 +725,7 @@ class FoodScraperBot:
                     writer.writerows(products_data)
             
             # Отправляем файлы
-            await message.reply_text(f"📁 *Сохранение результатов отладки {source_name}...*")
+            await message.reply_text(f"Сохранение результатов отладки {source_name}...")
             
             # Отправляем JSON файл
             try:
@@ -882,7 +734,7 @@ class FoodScraperBot:
                         chat_id=message.chat.id,
                         document=f,
                         filename=f"{filename}.json",
-                        caption=f"📊 *Результаты отладки {source_name} (JSON)*\n"
+                        caption=f"Результаты отладки {source_name} (JSON)\n"
                                f"📦 Товаров: {len(products)}\n"
                                f"📅 Время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
                     )
@@ -896,18 +748,18 @@ class FoodScraperBot:
                         chat_id=message.chat.id,
                         document=f,
                         filename=f"{filename}.csv",
-                        caption=f"📊 *Результаты отладки {source_name} (CSV)*\n"
+                        caption=f"Результаты отладки {source_name} (CSV)\n"
                                f"📦 Товаров: {len(products)}\n"
                                f"📅 Время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
                     )
             except Exception as e:
                 self.logger.error(f"Ошибка отправки CSV файла: {e}")
             
-            await message.reply_text(f"✅ *Файлы с результатами отладки {source_name} отправлены!*")
+            await message.reply_text(f"Файлы с результатами отладки {source_name} отправлены!")
             
         except Exception as e:
             self.logger.error(f"Ошибка сохранения результатов отладки: {e}")
-            await message.reply_text(f"❌ *Ошибка сохранения результатов:* {str(e)}")
+            await message.reply_text(f"Ошибка сохранения результатов: {str(e)}")
         
     async def _start_scraping(self, update, context, scrape_config):
         """Запуск процесса парсинга"""
@@ -962,7 +814,7 @@ class FoodScraperBot:
             try:
                 scraper = FoodScraper(scrape_config)
             except Exception as e:
-                await message.reply_text(f"❌ *Ошибка инициализации скрейпера:* {str(e)}")
+                await message.reply_text(f"Ошибка инициализации скрейпера: {str(e)}")
                 self.logger.error(f"Ошибка инициализации скрейпера: {e}")
                 return
                 
@@ -978,11 +830,11 @@ class FoodScraperBot:
                 
             else:
                 task_info['status'] = 'Ошибка'
-                await message.reply_text("❌ *Парсинг по адресу завершен с ошибками*\n\nПроверьте логи для деталей")
+                await message.reply_text("Парсинг по адресу завершен с ошибками\n\nПроверьте логи для деталей")
                 
         except Exception as e:
             task_info['status'] = f'Ошибка: {str(e)}'
-            await message.reply_text(f"❌ *Критическая ошибка:*\n\n{str(e)}")
+            await message.reply_text(f"Критическая ошибка:\n\n{str(e)}")
             self.logger.error(f"Ошибка в задаче парсинга по адресу: {e}")
             
         finally:
@@ -1003,7 +855,7 @@ class FoodScraperBot:
             all_products = await scraper.scrape_by_address(address)
             
             if not all_products:
-                await message.reply_text(f"❌ *Не удалось найти товары для адреса:* {address}")
+                await message.reply_text(f"Не удалось найти товары для адреса: {address}")
                 return False
                 
             # Сохраняем продукты
@@ -1014,7 +866,7 @@ class FoodScraperBot:
                 task_info['progress'] = '100%'
                 return True
             else:
-                await message.reply_text(f"❌ *Не удалось сохранить товары для адреса:* {address}")
+                await message.reply_text(f"Не удалось сохранить товары для адреса: {address}")
                 return False
                 
         except Exception as e:
@@ -1031,7 +883,7 @@ class FoodScraperBot:
             try:
                 scraper = FoodScraper(scrape_config)
             except Exception as e:
-                await message.reply_text(f"❌ *Ошибка инициализации скрейпера:* {str(e)}")
+                await message.reply_text(f"Ошибка инициализации скрейпера: {str(e)}")
                 self.logger.error(f"Ошибка инициализации скрейпера: {e}")
                 return
                 
@@ -1047,11 +899,11 @@ class FoodScraperBot:
                 
             else:
                 task_info['status'] = 'Ошибка'
-                await message.reply_text("❌ *Парсинг завершен с ошибками*\n\nПроверьте логи для деталей")
+                await message.reply_text("Парсинг завершен с ошибками\n\nПроверьте логи для деталей")
                 
         except Exception as e:
             task_info['status'] = f'Ошибка: {str(e)}'
-            await message.reply_text(f"❌ *Критическая ошибка:*\n\n{str(e)}")
+            await message.reply_text(f"Критическая ошибка:\n\n{str(e)}")
             self.logger.error(f"Ошибка в задаче парсинга: {e}")
             
         finally:
@@ -1071,7 +923,7 @@ class FoodScraperBot:
             
             if total_sources == 0:
                 self.logger.error("Не найдено ни одного источника для парсинга")
-                await message.reply_text("❌ *Ошибка:* Не найдено ни одного источника для парсинга")
+                await message.reply_text("Ошибка: Не найдено ни одного источника для парсинга")
                 return False
                 
             # Проверяем, что все скрейперы инициализированы
@@ -1079,13 +931,13 @@ class FoodScraperBot:
                 self.logger.info(f"Проверяем скрейпер {source_name}: {scraper.scrapers[source_name]}")
                 if not scraper.scrapers[source_name]:
                     self.logger.error(f"Скрейпер {source_name} не инициализирован")
-                    await message.reply_text(f"❌ *Ошибка:* Скрейпер {source_name} не инициализирован")
+                    await message.reply_text(f"Ошибка: Скрейпер {source_name} не инициализирован")
                     return False
                 
             # Сообщение 1: Начало парсинга
             self.logger.info("Отправляем сообщение о начале парсинга")
-            await message.reply_text(f"🚀 *Начинаем парсинг {total_sources} источников*\n" +
-                                   f"🔍 *Источники:* {', '.join(sources)}")
+            await message.reply_text(f"Начинаем парсинг {total_sources} источников\n" +
+                                   f"Источники: {', '.join(sources)}")
             
             all_products = {}
             total_products = 0
@@ -1097,7 +949,7 @@ class FoodScraperBot:
                     self.logger.info(f"Начинаем парсинг источника {source_name} ({i+1}/{total_sources})")
                     
                     # Сообщение 2: Парсинг источника
-                    await message.reply_text(f"🔍 *Парсинг {source_name}...*")
+                    await message.reply_text(f"Парсинг {source_name}...")
                     
                     # Получаем категории для источника
                     categories = task_info.get('categories', [])
@@ -1141,11 +993,11 @@ class FoodScraperBot:
                     total_products += len(source_products)
                     
                     # Сообщение 3: Результаты по источнику
-                    await message.reply_text(f"✅ *{source_name} завершен*\n" +
-                                           f"📦 *Найдено продуктов:* {len(source_products)}")
+                    await message.reply_text(f"{source_name} завершен\n" +
+                                           f"Найдено продуктов: {len(source_products)}")
                     
                 except Exception as e:
-                    await message.reply_text(f"❌ *Ошибка в {source_name}:* {str(e)}")
+                    await message.reply_text(f"Ошибка в {source_name}: {str(e)}")
                     all_products[source_name] = []
                     continue
             
@@ -1155,7 +1007,7 @@ class FoodScraperBot:
             if total_products > 0:
                 # Сообщение 4: Сохранение
                 self.logger.info("Начинаем сохранение продуктов в БД")
-                await message.reply_text(f"💾 *Сохранение {total_products} продуктов в БД...*")
+                await message.reply_text(f"Сохранение {total_products} продуктов в БД...")
                 
                 try:
                     saved_count = await scraper.save_products(all_products)
@@ -1165,19 +1017,19 @@ class FoodScraperBot:
                     saved_count = 0
                 
                 # Сообщение 5: Завершение
-                await message.reply_text(f"🎉 *Парсинг завершен успешно!*\n" +
-                                       f"📊 *Всего продуктов:* {total_products}\n" +
-                                       f"💾 *Сохранено в БД:* {saved_count}")
+                await message.reply_text(f"Парсинг завершен успешно!\n" +
+                                       f"Всего продуктов: {total_products}\n" +
+                                       f"Сохранено в БД: {saved_count}")
                 
                 return True
             else:
                 self.logger.warning("Не найдено ни одного продукта")
-                await message.reply_text("❌ *Не найдено ни одного продукта*\n\n" +
+                await message.reply_text("Не найдено ни одного продукта\n\n" +
                                        "Проверьте логи для деталей")
                 return False
                 
         except Exception as e:
-            await message.reply_text(f"❌ *Критическая ошибка:* {str(e)}")
+            await message.reply_text(f"Критическая ошибка: {str(e)}")
             self.logger.error(f"Ошибка в _run_scraping_with_progress: {e}")
             return False
                 
@@ -1232,14 +1084,14 @@ class FoodScraperBot:
     async def _send_results(self, update, context, export_files, task_info):
         """Отправка результатов парсинга"""
         results_text = f"""
-✅ *Парсинг завершен успешно!*
+Парсинг завершен успешно!
 
-📊 *Результаты:*
+Результаты:
 • Источники: {', '.join(task_info['sources'])}
 • Категории: {', '.join(task_info['categories']) if task_info['categories'] else 'Все'}
 • Время выполнения: {int(asyncio.get_event_loop().time() - task_info['start_time'])} сек
 
-📁 *Файлы для скачивания:*
+Файлы для скачивания:
         """
         
         # Определяем, как отправлять сообщения (обычное сообщение или callback)
@@ -1254,12 +1106,12 @@ class FoodScraperBot:
         
         # Отправляем текстовое сообщение
         try:
-            await message.reply_text(results_text, parse_mode='Markdown')
+            await message.reply_text(results_text, )
         except Exception as e:
             self.logger.error(f"Ошибка отправки текстового сообщения: {e}")
             # Пытаемся отправить через context.bot
             if chat_id:
-                await context.bot.send_message(chat_id=chat_id, text=results_text, parse_mode='Markdown')
+                await context.bot.send_message(chat_id=chat_id, text=results_text, )
         
         # Отправляем файлы
         for format_name, file_path in export_files.items():
@@ -1275,7 +1127,7 @@ class FoodScraperBot:
                 except Exception as e:
                     self.logger.error(f"Ошибка отправки файла {file_path}: {e}")
                     try:
-                        await message.reply_text(f"⚠️ *Ошибка отправки файла {format_name}:* {str(e)}")
+                        await message.reply_text(f"Ошибка отправки файла {format_name}: {str(e)}")
                     except:
                         if chat_id:
                             await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка отправки файла {format_name}: {str(e)}")
