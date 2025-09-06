@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Быстрый тест парсера в режиме максимальной скорости
+Тестовый скрипт для проверки улучшений парсера
 """
 import asyncio
 import time
@@ -13,26 +13,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.main import FoodScraper, load_config
 
-async def quick_test():
-    """Быстрый тест парсера"""
-    print("🚀 Быстрый тест парсера...")
+async def test_improvements():
+    """Тестируем улучшения парсера"""
+    print("🚀 Тестируем улучшения парсера...")
     
     # Загружаем конфигурацию
     config = load_config('config.yaml')
     
-    # Устанавливаем параметры для максимальной скорости
+    # Устанавливаем тестовые параметры
     config['limit'] = 1000  # 1000 товаров на каждый источник
-    config['fast_mode'] = True  # Быстрый режим
-    config['headless'] = True  # Скрытый браузер
-    config['max_concurrent'] = 6  # Максимальная параллельность
-    config['throttle_min'] = 0.01  # Минимальные задержки
-    config['throttle_max'] = 0.05
+    config['headless'] = True  # Скрытый браузер для ускорения
+    config['max_concurrent'] = 3  # Параллельность
+    config['throttle_min'] = 0.1  # Быстрые задержки
+    config['throttle_max'] = 0.3
     
     print(f"📊 Конфигурация:")
     print(f"   • Лимит товаров: {config['limit']}")
     print(f"   • Источники: {config['sources']}")
-    print(f"   • Быстрый режим: {config['fast_mode']}")
     print(f"   • Параллельность: {config['max_concurrent']}")
+    print(f"   • Скрытый браузер: {config['headless']}")
     
     # Создаем скрейпер
     scraper = FoodScraper(config)
@@ -41,7 +40,7 @@ async def quick_test():
     
     try:
         # Запускаем парсинг
-        print("\n🔍 Начинаем быстрый парсинг...")
+        print("\n🔍 Начинаем парсинг всех источников...")
         all_products = await scraper.scrape_all()
         
         # Подсчитываем результаты
@@ -53,11 +52,11 @@ async def quick_test():
         
         duration = time.time() - start_time
         
-        print(f"\n🎉 Быстрый парсинг завершен!")
+        print(f"\n🎉 Парсинг завершен!")
         print(f"📊 Результаты:")
         print(f"   • Всего товаров: {total_products}")
-        print(f"   • Время выполнения: {duration:.2f} сек")
-        print(f"   • Скорость: {total_products/duration:.0f} товаров/сек")
+        print(f"   • Время выполнения: {duration:.1f} сек")
+        print(f"   • Средняя скорость: {total_products/duration:.1f} товаров/сек")
         
         # Проверяем, достигли ли мы цели
         expected_total = len(config['sources']) * config['limit']
@@ -73,7 +72,7 @@ async def quick_test():
             print(f"✅ Сохранено в БД: {saved_count}")
             
             # Экспортируем в CSV
-            output_file = f"data/out/quick_products_{int(time.time())}.csv"
+            output_file = f"data/out/test_products_{int(time.time())}.csv"
             print(f"📁 Экспортируем в {output_file}...")
             export_success = await scraper.export_data(output_file, all_products)
             if export_success:
@@ -90,16 +89,16 @@ async def quick_test():
         return False
 
 if __name__ == "__main__":
-    print("⚡ Быстрый тест парсера готовой еды")
+    print("🧪 Тест улучшений парсера готовой еды")
     print("=" * 50)
     
     try:
-        success = asyncio.run(quick_test())
+        success = asyncio.run(test_improvements())
         if success:
-            print("\n✅ Быстрый тест завершен успешно!")
+            print("\n✅ Тест завершен успешно!")
             sys.exit(0)
         else:
-            print("\n❌ Быстрый тест завершен с ошибками")
+            print("\n❌ Тест завершен с ошибками")
             sys.exit(1)
     except KeyboardInterrupt:
         print("\n⚠️  Тест прерван пользователем")

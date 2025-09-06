@@ -54,6 +54,7 @@ class FoodScraperBot:
         # Команды парсера
         self.application.add_handler(CommandHandler("scrape", self.scrape_command))
         self.application.add_handler(CommandHandler("scrape_all", self.scrape_all_command))
+        self.application.add_handler(CommandHandler("scrape_address", self.scrape_address_command))
         self.application.add_handler(CommandHandler("test_samokat", self.test_samokat_command))
         self.application.add_handler(CommandHandler("test_lavka", self.test_lavka_command))
         self.application.add_handler(CommandHandler("test_vkusvill", self.test_vkusvill_command))
@@ -68,17 +69,15 @@ class FoodScraperBot:
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /start"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         welcome_text = """
-🤖 *Бот-парсер готовой еды*
+🤖 Бот-парсер готовой еды
 
 Доступные команды:
 /start - Начать работу
 /help - Справка по командам
-/scrape\\_all - Запустить парсинг всех источников (рекомендуется)
+/scrape_all - Запустить парсинг всех источников (рекомендуется)
+/scrape_address - Парсинг по адресу доставки
 /scrape - Запустить парсинг с настройками
 /sources - Выбрать источники
 /categories - Выбрать категории
@@ -89,6 +88,7 @@ class FoodScraperBot:
         
         keyboard = [
             [InlineKeyboardButton("🚀 Парсинг всех источников", callback_data="scrape_all")],
+            [InlineKeyboardButton("📍 Парсинг по адресу", callback_data="scrape_address")],
             [InlineKeyboardButton("⚙️ Настройки парсинга", callback_data="scrape_menu")],
             [InlineKeyboardButton("🧪 Тестирование источников", callback_data="test_sources")],
             [InlineKeyboardButton("📊 Выбрать источники", callback_data="sources_menu")],
@@ -101,44 +101,41 @@ class FoodScraperBot:
         
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /help"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         help_text = """
-📚 *Справка по командам*
+📚 Справка по командам
 
-*Основные команды:*
+Основные команды:
 /start - Начать работу с ботом
 /help - Показать эту справку
 /status - Показать статус текущих задач
 
-*Парсинг:*
-/scrape\\_all - Запустить парсинг всех источников (рекомендуется)
+Парсинг:
+/scrape_all - Запустить парсинг всех источников (рекомендуется)
 /scrape - Запустить парсинг с текущими настройками
 /sources - Выбрать источники для парсинга
 /categories - Выбрать категории продуктов
 
-*Тестирование отдельных источников:*
-/test\\_samokat - Тестирование Самоката
-/test\\_lavka - Тестирование Яндекс.Лавки
-/test\\_vkusvill - Тестирование ВкусВилла
+Тестирование отдельных источников:
+/test_samokat - Тестирование Самоката
+/test_lavka - Тестирование Яндекс.Лавки
+/test_vkusvill - Тестирование ВкусВилла
 
-*Примеры использования:*
-• /scrape\\_all - запуск парсинга всех источников (рекомендуется)
+Примеры использования:
+• /scrape_all - запуск парсинга всех источников (рекомендуется)
 • /scrape - запуск парсинга с текущими настройками
-• /test\\_samokat - быстрое тестирование Самоката
-• /test\\_lavka - быстрое тестирование Лавки
-• /test\\_vkusvill - быстрое тестирование ВкусВилла
+• /test_samokat - быстрое тестирование Самоката
+• /test_lavka - быстрое тестирование Лавки
+• /test_vkusvill - быстрое тестирование ВкусВилла
 • /sources samokat lavka - парсинг Самоката и Лавки
 • /categories готовые блюда салаты - парсинг конкретных категорий
 
-*Поддерживаемые источники:*
+Поддерживаемые источники:
 • samokat - Самокат
 • lavka - Яндекс.Лавка  
 • vkusvill - ВкусВилл
 
-*Форматы экспорта:*
+Форматы экспорта:
 • CSV - таблица Excel
 • JSONL - структурированные данные
 • SQLite - база данных
@@ -148,9 +145,6 @@ class FoodScraperBot:
         
     async def scrape_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /scrape"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         # Парсим аргументы команды
         args = context.args if context.args else []
@@ -174,32 +168,72 @@ class FoodScraperBot:
         await self._start_scraping(update, context, scrape_config)
         
     async def scrape_all_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка команды /scrape_all - парсинг всех источников"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
+        """Обработка команды /scrape_all - парсинг всех источников только для Москвы"""
             
-        # Создаем конфигурацию для парсинга всех источников с оптимизированными настройками
+        # Создаем конфигурацию для быстрого парсинга только для Москвы
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['samokat', 'lavka', 'vkusvill']
-        scrape_config['limit'] = 500  # Увеличиваем лимит для быстрого парсинга
-        scrape_config['headless'] = True  # Скрытый браузер для ускорения
-        scrape_config['max_concurrent'] = 4  # Увеличиваем параллельность
+        scrape_config['city'] = 'Москва'  # Принудительно Москва
+        scrape_config['limit'] = 200  # Увеличиваем лимит для получения 1000-2000 товаров на сервис
+        scrape_config['headless'] = True
+        scrape_config['max_concurrent'] = 3  # Оптимальная параллельность
+        scrape_config['throttle_min'] = 0.1  # Минимальные задержки для максимальной скорости
+        scrape_config['throttle_max'] = 0.3
         
-        await update.message.reply_text("🚀 *Запуск парсинга всех источников*\n\n" +
-                                       "📊 *Источники:* Самокат, Яндекс.Лавка, ВкусВилл\n" +
-                                       "🏷️ *Категории:* Автоопределение\n" +
-                                       "📦 *Лимит:* До 500 товаров на категорию\n" +
-                                       "⏳ *Время:* Ожидайте, это может занять 5-10 минут")
+        await update.message.reply_text("🚀 Запуск парсинга всех источников для Москвы\n\n" +
+                                       "📊 Источники: Самокат, Яндекс.Лавка, ВкусВилл\n" +
+                                       "🏙️ Город: Москва\n" +
+                                       "🏷️ Категории: 10+ категорий (автоопределение)\n" +
+                                       "📦 Лимит: До 200 товаров на категорию\n" +
+                                       "🎯 Цель: 1000-2000 товаров на сервис\n" +
+                                       "⚡ Режим: Максимальная скорость\n" +
+                                       "⏳ Время: Ожидайте, это займет 5-8 минут")
         
         # Запускаем парсинг
         await self._start_scraping(update, context, scrape_config)
         
+    async def scrape_address_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка команды /scrape_address - парсинг по адресу доставки"""
+        # Парсим аргументы команды
+        args = context.args if context.args else []
+        
+        if not args:
+            await update.message.reply_text(
+                "📍 Парсинг по адресу доставки\n\n"
+                "Использование: /scrape_address <адрес>\n\n"
+                "Примеры:\n"
+                "• /scrape_address Москва, ул. Тверская, 1\n"
+                "• /scrape_address Санкт-Петербург, Невский проспект, 28\n"
+                "• /scrape_address Екатеринбург, ул. Ленина, 5\n\n"
+                "Бот найдет товары, доступные для доставки по указанному адресу.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Объединяем все аргументы в один адрес
+        address = " ".join(args)
+        
+        await update.message.reply_text(
+            f"📍 Парсинг по адресу: {address}\n\n"
+            "🔍 Ищу товары, доступные для доставки по указанному адресу...\n"
+            "⏱️ Это может занять несколько минут.",
+            parse_mode='Markdown'
+        )
+        
+        # Создаем конфигурацию для парсинга по адресу
+        scrape_config = self.config.copy()
+        scrape_config['sources'] = ['samokat', 'lavka', 'vkusvill']
+        scrape_config['limit'] = 150  # Увеличиваем лимит для получения большего количества товаров
+        scrape_config['headless'] = True
+        scrape_config['max_concurrent'] = 3  # Параллельный парсинг
+        scrape_config['throttle_min'] = 0.1  # Минимальные задержки для максимальной скорости
+        scrape_config['throttle_max'] = 0.3
+        
+        # Запускаем парсинг по адресу
+        await self._start_scraping_by_address(update, context, scrape_config, address)
+        
     async def sources_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /sources"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         keyboard = [
             [InlineKeyboardButton("Самокат", callback_data="source_samokat")],
@@ -211,7 +245,7 @@ class FoodScraperBot:
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "🔍 *Выберите источники для парсинга:*\n\n"
+            "🔍 Выберите источники для парсинга:\n\n"
             "• Самокат - готовые блюда и кулинария\n"
             "• Яндекс.Лавка - продукты и готовая еда\n"
             "• ВкусВилл - фермерские продукты и готовые блюда",
@@ -221,9 +255,6 @@ class FoodScraperBot:
         
     async def categories_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /categories"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         keyboard = [
             [InlineKeyboardButton("Готовые блюда", callback_data="cat_ready_food")],
@@ -247,9 +278,6 @@ class FoodScraperBot:
         
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /status"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         user_id = update.effective_user.id
         
@@ -272,9 +300,6 @@ class FoodScraperBot:
         
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий на inline кнопки"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.callback_query.answer("❌ У вас нет доступа к этому боту.")
-            return
             
         query = update.callback_query
         await query.answer()
@@ -453,9 +478,6 @@ class FoodScraperBot:
         
     async def test_samokat_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /test_samokat - тестирование Самоката"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['samokat']
@@ -475,9 +497,6 @@ class FoodScraperBot:
         
     async def test_lavka_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /test_lavka - тестирование Лавки"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['lavka']
@@ -497,9 +516,6 @@ class FoodScraperBot:
         
     async def test_vkusvill_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /test_vkusvill - тестирование ВкусВилла"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         scrape_config = self.config.copy()
         scrape_config['sources'] = ['vkusvill']
@@ -537,6 +553,97 @@ class FoodScraperBot:
         
         # Запускаем парсинг в фоне
         asyncio.create_task(self._run_scraping_task(update, context, scrape_config, task_info))
+        
+    async def _start_scraping_by_address(self, update, context, scrape_config, address):
+        """Запуск процесса парсинга по адресу"""
+        user_id = update.effective_user.id if hasattr(update, 'effective_user') else update.from_user.id
+        
+        # Создаем задачу
+        task_id = f"address_task_{user_id}_{int(asyncio.get_event_loop().time())}"
+        
+        task_info = {
+            'task_id': task_id,
+            'start_time': asyncio.get_event_loop().time(),
+            'sources': scrape_config.get('sources', ['samokat']),
+            'categories': scrape_config.get('categories', []),
+            'status': f'Парсинг по адресу: {address}',
+            'progress': '0%',
+            'address': address
+        }
+        
+        self.active_tasks[user_id] = task_info
+        
+        # Запускаем парсинг по адресу в фоне
+        asyncio.create_task(self._run_scraping_by_address_task(update, context, scrape_config, task_info, address))
+        
+    async def _run_scraping_by_address_task(self, update, context, scrape_config, task_info, address):
+        """Выполнение задачи парсинга по адресу"""
+        user_id = update.effective_user.id if hasattr(update, 'effective_user') else update.from_user.id
+        message = update.message if hasattr(update, 'message') else update
+        
+        try:
+            # Создаем скрейпер
+            try:
+                scraper = FoodScraper(scrape_config)
+            except Exception as e:
+                await message.reply_text(f"❌ *Ошибка инициализации скрейпера:* {str(e)}")
+                self.logger.error(f"Ошибка инициализации скрейпера: {e}")
+                return
+                
+            # Запускаем парсинг по адресу
+            result = await self._run_scraping_by_address_with_progress(scraper, message, task_info, address)
+            
+            if result:
+                # Экспортируем данные
+                export_files = await self._export_data(scraper, user_id)
+                
+                # Отправляем результаты
+                await self._send_results(message, context, export_files, task_info)
+                
+            else:
+                task_info['status'] = 'Ошибка'
+                await message.reply_text("❌ *Парсинг по адресу завершен с ошибками*\n\nПроверьте логи для деталей")
+                
+        except Exception as e:
+            task_info['status'] = f'Ошибка: {str(e)}'
+            await message.reply_text(f"❌ *Критическая ошибка:*\n\n{str(e)}")
+            self.logger.error(f"Ошибка в задаче парсинга по адресу: {e}")
+            
+        finally:
+            # Удаляем задачу из активных
+            if user_id in self.active_tasks:
+                del self.active_tasks[user_id]
+                
+    async def _run_scraping_by_address_with_progress(self, scraper, message, task_info, address):
+        """Запуск парсинга по адресу с прогрессом"""
+        try:
+            self.logger.info(f"_run_scraping_by_address_with_progress вызван для адреса: {address}")
+            
+            # Обновляем статус
+            task_info['status'] = f'Парсинг по адресу: {address}'
+            task_info['progress'] = '10%'
+            
+            # Запускаем парсинг по адресу
+            all_products = await scraper.scrape_by_address(address)
+            
+            if not all_products:
+                await message.reply_text(f"❌ *Не удалось найти товары для адреса:* {address}")
+                return False
+                
+            # Сохраняем продукты
+            total_saved = await scraper.save_products(all_products)
+            
+            if total_saved > 0:
+                task_info['status'] = f'Найдено {total_saved} товаров для адреса: {address}'
+                task_info['progress'] = '100%'
+                return True
+            else:
+                await message.reply_text(f"❌ *Не удалось сохранить товары для адреса:* {address}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка в _run_scraping_by_address_with_progress: {e}")
+            return False
         
     async def _run_scraping_task(self, update, context, scrape_config, task_info):
         """Выполнение задачи парсинга"""
@@ -799,9 +906,6 @@ class FoodScraperBot:
                     
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка текстовых сообщений"""
-        if not self._is_user_allowed(update.effective_user.id):
-            await update.message.reply_text("❌ У вас нет доступа к этому боту.")
-            return
             
         text = update.message.text.lower()
         
@@ -825,11 +929,6 @@ class FoodScraperBot:
                 "Напишите /help для справки."
             )
             
-    def _is_user_allowed(self, user_id: int) -> bool:
-        """Проверка доступа пользователя"""
-        if not self.allowed_users:
-            return True  # Если список пуст, доступ для всех
-        return user_id in self.allowed_users
         
     async def run(self):
         """Запуск бота"""

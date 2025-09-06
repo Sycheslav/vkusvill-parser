@@ -59,16 +59,6 @@ class DataStorage:
                     tags TEXT,
                     composition TEXT,
                     url TEXT,
-                    image_url TEXT,
-                    image_path TEXT,
-                    available BOOLEAN DEFAULT 1,
-                    unit_price REAL,
-                    brand TEXT,
-                    weight_declared_g REAL,
-                    energy_kj_100g REAL,
-                    allergens TEXT,
-                    scraped_at TEXT,
-                    extra TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -104,20 +94,15 @@ class DataStorage:
                     UPDATE products SET
                         name = ?, category = ?, kcal_100g = ?, protein_100g = ?,
                         fat_100g = ?, carb_100g = ?, portion_g = ?, price = ?,
-                        shop = ?, tags = ?, composition = ?, url = ?, image_url = ?,
-                        image_path = ?, available = ?, unit_price = ?, brand = ?,
-                        weight_declared_g = ?, energy_kj_100g = ?, allergens = ?,
-                        scraped_at = ?, extra = ?, updated_at = CURRENT_TIMESTAMP
+                        shop = ?, tags = ?, composition = ?, url = ?,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 ''', (
                     product.name, product.category, product.kcal_100g,
                     product.protein_100g, product.fat_100g, product.carb_100g,
                     product.portion_g, product.price, product.shop,
                     json.dumps(product.tags), product.composition, product.url,
-                    product.image_url, product.image_path, product.available,
-                    product.unit_price, product.brand, product.weight_declared_g,
-                    product.energy_kj_100g, json.dumps(product.allergens),
-                    product.scraped_at, json.dumps(product.extra), product.id
+                    product.id
                 ))
                 
                 self.logger.debug(f"Продукт {product.id} обновлен")
@@ -127,20 +112,13 @@ class DataStorage:
                 cursor.execute('''
                     INSERT INTO products (
                         id, name, category, kcal_100g, protein_100g, fat_100g,
-                        carb_100g, portion_g, price, shop, tags, composition,
-                        url, image_url, image_path, available, unit_price,
-                        brand, weight_declared_g, energy_kj_100g, allergens,
-                        scraped_at, extra
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        carb_100g, portion_g, price, shop, tags, composition, url
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     product.id, product.name, product.category, product.kcal_100g,
                     product.protein_100g, product.fat_100g, product.carb_100g,
                     product.portion_g, product.price, product.shop,
-                    json.dumps(product.tags), product.composition, product.url,
-                    product.image_url, product.image_path, product.available,
-                    product.unit_price, product.brand, product.weight_declared_g,
-                    product.energy_kj_100g, json.dumps(product.allergens),
-                    product.scraped_at, json.dumps(product.extra)
+                    json.dumps(product.tags), product.composition, product.url
                 ))
                 
                 self.logger.debug(f"Продукт {product.id} создан")
@@ -242,17 +220,7 @@ class DataStorage:
             shop=row[9],
             tags=json.loads(row[10]) if row[10] else [],
             composition=row[11] or "",
-            url=row[12] or "",
-            image_url=row[13] or "",
-            image_path=row[14],
-            available=bool(row[15]),
-            unit_price=row[16],
-            brand=row[17],
-            weight_declared_g=row[18],
-            energy_kj_100g=row[19],
-            allergens=json.loads(row[20]) if row[20] else [],
-            scraped_at=row[21] or "",
-            extra=json.loads(row[22]) if row[22] else {}
+            url=row[12] or ""
         )
         
     def export_to_csv(self, file_path: str, products: List[ScrapedProduct] = None) -> bool:
@@ -282,19 +250,9 @@ class DataStorage:
                     'portion_g': product.portion_g,
                     'price': product.price,
                     'shop': product.shop,
-                    'tags': '; '.join(product.tags),
+                    'tags': '; '.join(product.tags) if product.tags else '',
                     'composition': product.composition,
-                    'url': product.url,
-                    'image_url': product.image_url,
-                    'image_path': product.image_path,
-                    'available': product.available,
-                    'unit_price': product.unit_price,
-                    'brand': product.brand,
-                    'weight_declared_g': product.weight_declared_g,
-                    'energy_kj_100g': product.energy_kj_100g,
-                    'allergens': '; '.join(product.allergens),
-                    'scraped_at': product.scraped_at,
-                    'extra': json.dumps(product.extra, ensure_ascii=False)
+                    'url': product.url
                 })
                 
             # Записываем в CSV
@@ -341,17 +299,7 @@ class DataStorage:
                         'shop': product.shop,
                         'tags': product.tags,
                         'composition': product.composition,
-                        'url': product.url,
-                        'image_url': product.image_url,
-                        'image_path': product.image_path,
-                        'available': product.available,
-                        'unit_price': product.unit_price,
-                        'brand': product.brand,
-                        'weight_declared_g': product.weight_declared_g,
-                        'energy_kj_100g': product.energy_kj_100g,
-                        'allergens': product.allergens,
-                        'scraped_at': product.scraped_at,
-                        'extra': product.extra
+                        'url': product.url
                     }
                     
                     jsonlfile.write(json.dumps(product_dict, ensure_ascii=False) + '\n')
@@ -388,20 +336,11 @@ class DataStorage:
                     'fat_100g': product.fat_100g,
                     'carb_100g': product.carb_100g,
                     'portion_g': product.portion_g,
-                    'price': product.price,
-                    'shop': product.shop,
-                    'tags': '; '.join(product.tags),
-                    'composition': product.composition,
-                    'url': product.url,
-                    'image_url': product.image_url,
-                    'image_path': product.image_path,
-                    'available': product.available,
-                    'unit_price': product.unit_price,
-                    'brand': product.brand,
-                    'weight_declared_g': product.weight_declared_g,
-                    'energy_kj_100g': product.energy_kj_100g,
-                    'allergens': '; '.join(product.allergens),
-                    'scraped_at': product.scraped_at,
+                                    'price': product.price,
+                'shop': product.shop,
+                'tags': '; '.join(product.tags),
+                'composition': product.composition,
+                'url': product.url,
                     'extra': json.dumps(product.extra, ensure_ascii=False)
                 })
                 

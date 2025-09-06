@@ -14,18 +14,21 @@ sources:
 categories: []
 
 # Лимит продуктов на категорию (пусто = без ограничений)
-limit: null
+limit: 1000  # Увеличиваем для получения 1000 товаров на каждый сервис
+
+# Быстрый режим (создает тестовые товары вместо реального парсинга)
+fast_mode: false
 
 # Загрузка изображений
 download_images: false
 
 # Настройки браузера
 headless: true  # true = скрытый браузер для ускорения
-max_concurrent: 4  # Увеличиваем количество одновременных процессов
+max_concurrent: 6  # Увеличиваем параллельность для скорости
 
 # Тайминги и ограничения
-throttle_min: 0.5  # Уменьшаем задержки для ускорения
-throttle_max: 1.0
+throttle_min: 0.05  # Минимальные задержки для максимальной скорости
+throttle_max: 0.1
 
 # Пути к файлам
 log_file: "data/out/scraper.log"
@@ -45,8 +48,8 @@ cookies_file: null
 user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Настройки таймаутов
-timeout_page_load: 60000  # Увеличиваем таймаут загрузки страницы
-timeout_element_wait: 20000  # Увеличиваем таймаут ожидания элементов
+timeout_page_load: 30000  # Увеличиваем для стабильности
+timeout_element_wait: 10000  # Быстрое ожидание элементов
 
 # Настройки повторных попыток
 max_retries: 3

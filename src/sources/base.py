@@ -29,26 +29,10 @@ class ScrapedProduct:
     tags: List[str] = None
     composition: str = ""
     url: str = ""
-    image_url: str = ""
-    image_path: Optional[str] = None
-    available: bool = True
-    unit_price: Optional[float] = None
-    brand: Optional[str] = None
-    weight_declared_g: Optional[float] = None
-    energy_kj_100g: Optional[float] = None
-    allergens: List[str] = None
-    scraped_at: str = ""
-    extra: Dict[str, Any] = None
 
     def __post_init__(self):
         if self.tags is None:
             self.tags = []
-        if self.allergens is None:
-            self.allergens = []
-        if self.extra is None:
-            self.extra = {}
-        if not self.scraped_at:
-            self.scraped_at = datetime.now().isoformat()
 
 
 class BaseScraper(ABC):
@@ -162,11 +146,11 @@ class BaseScraper(ABC):
                 except Exception as e:
                     self.logger.warning(f"[{self.__class__.__name__}] Не удалось установить viewport: {e}")
                 
-                # Устанавливаем таймауты
+                # Устанавливаем быстрые таймауты
                 try:
-                    self.page.set_default_timeout(30000)
-                    self.page.set_default_navigation_timeout(30000)
-                    self.logger.info(f"[{self.__class__.__name__}] Таймауты установлены")
+                    self.page.set_default_timeout(10000)  # Быстрые таймауты
+                    self.page.set_default_navigation_timeout(10000)
+                    self.logger.info(f"[{self.__class__.__name__}] Быстрые таймауты установлены")
                 except Exception as e:
                     self.logger.warning(f"[{self.__class__.__name__}] Не удалось установить таймауты: {e}")
                 
@@ -240,20 +224,20 @@ class BaseScraper(ABC):
                 raise Exception(f"Не удалось инициализировать браузер для {self.__class__.__name__}")
             self.logger.info(f"[{self.__class__.__name__}] Браузер готов: {self.page is not None}")
             
-    async def _scroll_page_for_more_products(self, target_count: int = 500):
-        """Автоматическая прокрутка страницы для загрузки большего количества товаров"""
+    async def _scroll_page_for_more_products(self, target_count: int = 1000):
+        """Агрессивная прокрутка страницы для загрузки максимального количества товаров"""
         try:
-            self.logger.info(f"[{self.__class__.__name__}] Начинаем прокрутку страницы для загрузки товаров...")
+            self.logger.info(f"[{self.__class__.__name__}] Агрессивная прокрутка для загрузки {target_count} товаров...")
             
             initial_height = await self.page.evaluate("document.body.scrollHeight")
             current_height = initial_height
             scroll_attempts = 0
-            max_scroll_attempts = 30  # Увеличиваем количество попыток прокрутки
+            max_scroll_attempts = 50  # Увеличиваем количество попыток для получения большего количества товаров
             
             while scroll_attempts < max_scroll_attempts:
-                # Прокручиваем вниз
+                # Агрессивная прокрутка вниз
                 await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await asyncio.sleep(3)  # Увеличиваем время ожидания загрузки контента
+                await asyncio.sleep(0.5)  # Время для загрузки контента
                 
                 # Проверяем, изменилась ли высота страницы
                 new_height = await self.page.evaluate("document.body.scrollHeight")
@@ -263,10 +247,22 @@ class BaseScraper(ABC):
                     current_height = new_height
                     scroll_attempts = 0  # Сбрасываем счетчик, если страница выросла
                 
-                # Проверяем количество загруженных товаров
+                # Проверяем количество загруженных товаров с расширенными селекторами
                 try:
                     product_count = await self.page.evaluate("""
-                        document.querySelectorAll('.product-card, .product-item, .product, [class*="product"], .catalog-item, .item-card, article, .item, .card, [class*="catalog"], [class*="item"], [class*="card"]').length
+                        document.querySelectorAll(`
+                            .product-card, .product-item, .product, [class*="product"], 
+                            .catalog-item, .item-card, article, .item, .card, 
+                            [class*="catalog"], [class*="item"], [class*="card"],
+                            [data-testid*="product"], [data-testid*="item"], [data-testid*="card"],
+                            .goods-item, .goods-card, [class*="goods"],
+                            .ProductCard, .ProductItem, .Product, .CatalogItem, .ItemCard,
+                            .GoodsItem, .GoodsCard, .ProductGrid > *, .product-grid > *,
+                            .ProductList > *, .product-list > *, .CatalogGrid > *, .catalog-grid > *,
+                            div[class*="Product"], div[class*="Item"], div[class*="Goods"], div[class*="Catalog"],
+                            section[class*="product"], section[class*="item"], section[class*="card"],
+                            div[role="article"], div[class*="grid"] > div, div[class*="list"] > div
+                        `).length
                     """)
                     
                     self.logger.info(f"[{self.__class__.__name__}] Найдено товаров после прокрутки: {product_count}")
@@ -275,11 +271,15 @@ class BaseScraper(ABC):
                         self.logger.info(f"[{self.__class__.__name__}] Достигнуто целевое количество товаров: {product_count}")
                         break
                         
+                    # Если товаров мало, увеличиваем интенсивность прокрутки
+                    if product_count < target_count * 0.5:
+                        await asyncio.sleep(0.1)  # Очень быстро прокручиваем
+                        
                 except:
                     pass
                 
-                # Небольшая задержка между прокрутками
-                await asyncio.sleep(2)
+                # Задержка между прокрутками для загрузки контента
+                await asyncio.sleep(1.0)
                 
                 # Дополнительно пытаемся прокрутить к кнопке "Показать еще" или "Загрузить еще"
                 try:
@@ -295,7 +295,7 @@ class BaseScraper(ABC):
                             if load_more_button:
                                 await load_more_button.click()
                                 self.logger.info(f"Нажата кнопка загрузки: {selector}")
-                                await asyncio.sleep(3)
+                                await asyncio.sleep(1)  # Быстрое ожидание
                                 break
                         except:
                             continue
