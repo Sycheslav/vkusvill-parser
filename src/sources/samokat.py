@@ -441,7 +441,8 @@ class SamokatScraper(BaseScraper):
                 '.product-description', '.ProductDescription', '.product-composition',
                 '.item-description', '.ItemDescription', '.card-description',
                 '.description', '.Description', '.composition', '.Composition',
-                '[class*="description"]', '[class*="composition"]'
+                '[class*="description"]', '[class*="composition"]', '.ingredients',
+                '.product-ingredients', '.item-ingredients', '.card-ingredients'
             ]
             
             for selector in comp_selectors:
@@ -450,10 +451,28 @@ class SamokatScraper(BaseScraper):
                     if comp_elem:
                         comp_text = await comp_elem.text_content()
                         if comp_text and len(comp_text.strip()) > 5:
-                            composition = comp_text.strip()[:200]
+                            composition = comp_text.strip()[:300]  # Увеличиваем лимит
                             break
                 except:
                     continue
+            
+            # Если состав не найден, пытаемся извлечь из всего текста элемента
+            if not composition:
+                try:
+                    full_text = await element.text_content()
+                    if full_text:
+                        # Ищем ключевые слова состава
+                        composition_keywords = ['состав:', 'ингредиенты:', 'содержит:', 'в состав входят:']
+                        for keyword in composition_keywords:
+                            if keyword in full_text.lower():
+                                # Извлекаем текст после ключевого слова
+                                start_idx = full_text.lower().find(keyword) + len(keyword)
+                                composition_text = full_text[start_idx:start_idx + 200].strip()
+                                if composition_text:
+                                    composition = composition_text
+                                    break
+                except:
+                    pass
             
             # Извлекаем вес/порцию
             portion_g = None
@@ -505,6 +524,38 @@ class SamokatScraper(BaseScraper):
                         product_id = f"samokat_{part}"
                         break
             
+            # Извлекаем пищевую ценность (калории, белки, жиры, углеводы)
+            kcal_100g = None
+            protein_100g = None
+            fat_100g = None
+            carb_100g = None
+            
+            # Ищем информацию о пищевой ценности в тексте элемента
+            try:
+                full_text = await element.text_content()
+                if full_text:
+                    # Ищем калории (ккал на 100г)
+                    kcal_match = re.search(r'(\d+)\s*ккал', full_text, re.IGNORECASE)
+                    if kcal_match:
+                        kcal_100g = float(kcal_match.group(1))
+                    
+                    # Ищем белки (г на 100г)
+                    protein_match = re.search(r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if protein_match:
+                        protein_100g = float(protein_match.group(1).replace(',', '.'))
+                    
+                    # Ищем жиры (г на 100г)
+                    fat_match = re.search(r'жир[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if fat_match:
+                        fat_100g = float(fat_match.group(1).replace(',', '.'))
+                    
+                    # Ищем углеводы (г на 100г)
+                    carb_match = re.search(r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if carb_match:
+                        carb_100g = float(carb_match.group(1).replace(',', '.'))
+            except:
+                pass
+            
             # Создаем продукт только если есть реальные данные
             if name != "Неизвестный товар" and (price or url):
                 product = ScrapedProduct(
@@ -515,7 +566,11 @@ class SamokatScraper(BaseScraper):
                     url=url,
                     shop="samokat",
                     composition=composition,
-                    portion_g=portion_g
+                    portion_g=portion_g,
+                    kcal_100g=kcal_100g,
+                    protein_100g=protein_100g,
+                    fat_100g=fat_100g,
+                    carb_100g=carb_100g
                 )
                 
                 return product

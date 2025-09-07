@@ -365,6 +365,12 @@ class VkusvillScraper(BaseScraper):
                     url = await link_elem.get_attribute('href') or ""
                     if url and not url.startswith('http'):
                         url = urljoin(self.base_url, url)
+                    
+                    # Проверяем, что это URL страницы товара, а не изображения
+                    if url and ('/goods/' in url or '/product/' in url or '/item/' in url):
+                        pass  # Это правильный URL товара
+                    elif url and ('/img/' in url or '/image/' in url or '.jpg' in url or '.png' in url or '.webp' in url):
+                        url = ""  # Это URL изображения, не товара
             except:
                 pass
             
@@ -398,7 +404,8 @@ class VkusvillScraper(BaseScraper):
                     '.ProductItem__description', '.ProductItem__composition', '.item-description',
                     '.GoodsItem__description', '.GoodsItem__composition', '.goods-description',
                     '.CatalogItem__description', '.CatalogItem__composition', '.catalog-description',
-                    '.description', '.composition', '[class*="description"]', '[class*="composition"]'
+                    '.description', '.composition', '[class*="description"]', '[class*="composition"]',
+                    '.ingredients', '.product-ingredients', '.item-ingredients', '.card-ingredients'
                 ]
                 
                 for selector in comp_selectors:
@@ -406,8 +413,23 @@ class VkusvillScraper(BaseScraper):
                     if comp_elem:
                         comp_text = await comp_elem.text_content()
                         if comp_text and len(comp_text.strip()) > 5:
-                            composition = comp_text.strip()[:200]
+                            composition = comp_text.strip()[:300]  # Увеличиваем лимит
                             break
+                
+                # Если состав не найден, пытаемся извлечь из всего текста элемента
+                if not composition:
+                    full_text = await element.text_content()
+                    if full_text:
+                        # Ищем ключевые слова состава
+                        composition_keywords = ['состав:', 'ингредиенты:', 'содержит:', 'в состав входят:']
+                        for keyword in composition_keywords:
+                            if keyword in full_text.lower():
+                                # Извлекаем текст после ключевого слова
+                                start_idx = full_text.lower().find(keyword) + len(keyword)
+                                composition_text = full_text[start_idx:start_idx + 200].strip()
+                                if composition_text:
+                                    composition = composition_text
+                                    break
             except:
                 pass
             
@@ -444,8 +466,62 @@ class VkusvillScraper(BaseScraper):
                         product_id = f"vkusvill_{part}"
                         break
             
+            # Извлекаем пищевую ценность (калории, белки, жиры, углеводы)
+            kcal_100g = None
+            protein_100g = None
+            fat_100g = None
+            carb_100g = None
+            
+            # Ищем информацию о пищевой ценности в тексте элемента
+            try:
+                full_text = await element.text_content()
+                if full_text:
+                    # Ищем калории (ккал на 100г)
+                    kcal_match = re.search(r'(\d+)\s*ккал', full_text, re.IGNORECASE)
+                    if kcal_match:
+                        kcal_100g = float(kcal_match.group(1))
+                    
+                    # Ищем белки (г на 100г)
+                    protein_match = re.search(r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if protein_match:
+                        protein_100g = float(protein_match.group(1).replace(',', '.'))
+                    
+                    # Ищем жиры (г на 100г)
+                    fat_match = re.search(r'жир[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if fat_match:
+                        fat_100g = float(fat_match.group(1).replace(',', '.'))
+                    
+                    # Ищем углеводы (г на 100г)
+                    carb_match = re.search(r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
+                    if carb_match:
+                        carb_100g = float(carb_match.group(1).replace(',', '.'))
+            except:
+                pass
+            
             # Создаем продукт только если есть реальные данные
             if name != "Неизвестный товар" and (price or url):
+                # Если есть URL, пытаемся получить детальную информацию
+                if url and not any([kcal_100g, protein_100g, fat_100g, carb_100g]):
+                    try:
+                        self.logger.info(f"[{self.__class__.__name__}] Получаем детальную информацию для: {name}")
+                        detailed_product = await self.scrape_product_page(url)
+                        if detailed_product:
+                            # Обновляем базовую информацию детальной
+                            if detailed_product.kcal_100g:
+                                kcal_100g = detailed_product.kcal_100g
+                            if detailed_product.protein_100g:
+                                protein_100g = detailed_product.protein_100g
+                            if detailed_product.fat_100g:
+                                fat_100g = detailed_product.fat_100g
+                            if detailed_product.carb_100g:
+                                carb_100g = detailed_product.carb_100g
+                            if detailed_product.composition and not composition:
+                                composition = detailed_product.composition
+                            if detailed_product.portion_g and not portion_g:
+                                portion_g = detailed_product.portion_g
+                    except Exception as e:
+                        self.logger.warning(f"Не удалось получить детальную информацию для {url}: {e}")
+                
                 product = ScrapedProduct(
                     id=product_id,
                     name=name,
@@ -454,7 +530,11 @@ class VkusvillScraper(BaseScraper):
                     url=url,
                     shop="vkusvill",
                     composition=composition,
-                    portion_g=portion_g
+                    portion_g=portion_g,
+                    kcal_100g=kcal_100g,
+                    protein_100g=protein_100g,
+                    fat_100g=fat_100g,
+                    carb_100g=carb_100g
                 )
                 
                 return product
@@ -466,13 +546,262 @@ class VkusvillScraper(BaseScraper):
             return None
             
     async def scrape_product_page(self, url: str) -> Optional[ScrapedProduct]:
-        """Скрапить детальную страницу продукта - отключено для ускорения"""
+        """Скрапить детальную страницу продукта для извлечения пищевой ценности"""
         try:
-            self.logger.info(f"[{self.__class__.__name__}] scrape_product_page отключен для ускорения")
-            return None
+            if not url:
+                return None
+                
+            self.logger.info(f"[{self.__class__.__name__}] Парсинг детальной страницы: {url}")
+            
+            # Убеждаемся, что браузер готов
+            await self._ensure_browser_ready()
+            
+            # Переходим на страницу товара
+            await self.page.goto(url, timeout=20000)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+            await asyncio.sleep(2)
+            
+            # Извлекаем название товара
+            name = "Неизвестный товар"
+            name_selectors = [
+                'h1', '.product-title', '.ProductTitle', '.product-name', '.ProductName',
+                '[class*="title"]', '[class*="name"]', '.title', '.name'
+            ]
+            
+            for selector in name_selectors:
+                try:
+                    name_elem = await self.page.query_selector(selector)
+                    if name_elem:
+                        name_text = await name_elem.text_content()
+                        if name_text and len(name_text.strip()) > 3:
+                            name = name_text.strip()
+                            break
+                except:
+                    continue
+            
+            # Извлекаем цену
+            price = None
+            price_selectors = [
+                '.price', '.Price', '.product-price', '.ProductPrice', '.cost', '.Cost',
+                '[class*="price"]', '[class*="cost"]', '.price-value', '.cost-value'
+            ]
+            
+            for selector in price_selectors:
+                try:
+                    price_elem = await self.page.query_selector(selector)
+                    if price_elem:
+                        price_text = await price_elem.text_content()
+                        if price_text:
+                            price = self._extract_price(price_text)
+                            if price and price > 0:
+                                break
+                except:
+                    continue
+            
+            # Извлекаем состав
+            composition = ""
+            comp_selectors = [
+                '.product-description', '.ProductDescription', '.product-composition',
+                '.description', '.Description', '.composition', '.Composition',
+                '.ingredients', '.Ingredients', '.product-ingredients',
+                '[class*="description"]', '[class*="composition"]', '[class*="ingredients"]'
+            ]
+            
+            for selector in comp_selectors:
+                try:
+                    comp_elem = await self.page.query_selector(selector)
+                    if comp_elem:
+                        comp_text = await comp_elem.text_content()
+                        if comp_text and len(comp_text.strip()) > 5:
+                            composition = comp_text.strip()[:500]
+                            break
+                except:
+                    continue
+            
+            # Извлекаем вес/порцию
+            portion_g = None
+            weight_selectors = [
+                '.product-weight', '.ProductWeight', '.product-portion', '.ProductPortion',
+                '.weight', '.Weight', '.portion', '.Portion', '.size', '.Size',
+                '[class*="weight"]', '[class*="portion"]', '[class*="size"]'
+            ]
+            
+            for selector in weight_selectors:
+                try:
+                    weight_elem = await self.page.query_selector(selector)
+                    if weight_elem:
+                        weight_text = await weight_elem.text_content()
+                        if weight_text:
+                            # Извлекаем число из текста (например "250г" -> 250)
+                            weight_match = re.search(r'(\d+)', weight_text.replace(' ', ''))
+                            if weight_match:
+                                portion_g = float(weight_match.group(1))
+                                break
+                except:
+                    continue
+            
+            # Извлекаем пищевую ценность - ищем таблицу с БЖУ
+            kcal_100g = None
+            protein_100g = None
+            fat_100g = None
+            carb_100g = None
+            
+            try:
+                # Ищем таблицу пищевой ценности
+                nutrition_table = await self.page.query_selector('.nutrition-table, .nutrition-info, .product-nutrition, [class*="nutrition"]')
+                if nutrition_table:
+                    nutrition_text = await nutrition_table.text_content()
+                    self.logger.info(f"[{self.__class__.__name__}] Найдена таблица питания: {nutrition_text[:200]}...")
+                    if nutrition_text:
+                        # Ищем калории
+                        kcal_match = re.search(r'(\d+)\s*ккал', nutrition_text, re.IGNORECASE)
+                        if kcal_match:
+                            kcal_100g = float(kcal_match.group(1))
+                        
+                        # Ищем белки (расширенные варианты)
+                        protein_patterns = [
+                            r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белок\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белков\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белки\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'белок\s*(\d+(?:[.,]\d+)?)',
+                            r'белков\s*(\d+(?:[.,]\d+)?)',
+                            r'белки\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in protein_patterns:
+                            protein_match = re.search(pattern, nutrition_text, re.IGNORECASE)
+                            if protein_match:
+                                protein_100g = float(protein_match.group(1).replace(',', '.'))
+                                break
+                        
+                        # Ищем жиры (расширенные варианты)
+                        fat_patterns = [
+                            r'жир[аы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жир\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жиров\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жиры\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жир[аы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'жир\s*(\d+(?:[.,]\d+)?)',
+                            r'жиров\s*(\d+(?:[.,]\d+)?)',
+                            r'жиры\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in fat_patterns:
+                            fat_match = re.search(pattern, nutrition_text, re.IGNORECASE)
+                            if fat_match:
+                                fat_100g = float(fat_match.group(1).replace(',', '.'))
+                                break
+                        
+                        # Ищем углеводы (расширенные варианты)
+                        carb_patterns = [
+                            r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углевод\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углеводов\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углеводы\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'углевод\s*(\d+(?:[.,]\d+)?)',
+                            r'углеводов\s*(\d+(?:[.,]\d+)?)',
+                            r'углеводы\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in carb_patterns:
+                            carb_match = re.search(pattern, nutrition_text, re.IGNORECASE)
+                            if carb_match:
+                                carb_100g = float(carb_match.group(1).replace(',', '.'))
+                                break
+                
+                # Если таблица не найдена, ищем в тексте страницы
+                if not any([kcal_100g, protein_100g, fat_100g, carb_100g]):
+                    page_text = await self.page.text_content('body')
+                    self.logger.info(f"[{self.__class__.__name__}] Ищем в тексте страницы (первые 500 символов): {page_text[:500]}...")
+                    if page_text:
+                        # Ищем калории
+                        kcal_match = re.search(r'(\d+)\s*ккал', page_text, re.IGNORECASE)
+                        if kcal_match:
+                            kcal_100g = float(kcal_match.group(1))
+                        
+                        # Ищем белки (расширенные варианты)
+                        protein_patterns = [
+                            r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белок\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белков\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белки\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'белок\s*(\d+(?:[.,]\d+)?)',
+                            r'белков\s*(\d+(?:[.,]\d+)?)',
+                            r'белки\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in protein_patterns:
+                            protein_match = re.search(pattern, page_text, re.IGNORECASE)
+                            if protein_match:
+                                protein_100g = float(protein_match.group(1).replace(',', '.'))
+                                break
+                        
+                        # Ищем жиры (расширенные варианты)
+                        fat_patterns = [
+                            r'жир[аы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жир\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жиров\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жиры\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'жир[аы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'жир\s*(\d+(?:[.,]\d+)?)',
+                            r'жиров\s*(\d+(?:[.,]\d+)?)',
+                            r'жиры\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in fat_patterns:
+                            fat_match = re.search(pattern, page_text, re.IGNORECASE)
+                            if fat_match:
+                                fat_100g = float(fat_match.group(1).replace(',', '.'))
+                                break
+                        
+                        # Ищем углеводы (расширенные варианты)
+                        carb_patterns = [
+                            r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углевод\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углеводов\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углеводы\s*(\d+(?:[.,]\d+)?)\s*г',
+                            r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)',
+                            r'углевод\s*(\d+(?:[.,]\d+)?)',
+                            r'углеводов\s*(\d+(?:[.,]\d+)?)',
+                            r'углеводы\s*(\d+(?:[.,]\d+)?)'
+                        ]
+                        for pattern in carb_patterns:
+                            carb_match = re.search(pattern, page_text, re.IGNORECASE)
+                            if carb_match:
+                                carb_100g = float(carb_match.group(1).replace(',', '.'))
+                                break
+                            
+            except Exception as e:
+                self.logger.warning(f"Ошибка извлечения пищевой ценности: {e}")
+            
+            # Генерируем ID из URL
+            product_id = f"vkusvill_{hash(url)}"
+            url_parts = urlparse(url).path.split('/')
+            for part in url_parts:
+                if part and part.isdigit():
+                    product_id = f"vkusvill_{part}"
+                    break
+            
+            # Создаем продукт
+            product = ScrapedProduct(
+                id=product_id,
+                name=name,
+                category="",  # Категория будет установлена позже
+                price=price,
+                url=url,
+                shop="vkusvill",
+                composition=composition,
+                portion_g=portion_g,
+                kcal_100g=kcal_100g,
+                protein_100g=protein_100g,
+                fat_100g=fat_100g,
+                carb_100g=carb_100g
+            )
+            
+            self.logger.info(f"[{self.__class__.__name__}] Детальная страница обработана: {name}")
+            return product
             
         except Exception as e:
-            self.logger.error(f"Ошибка в отключенном scrape_product_page: {e}")
+            self.logger.error(f"Ошибка парсинга детальной страницы {url}: {e}")
             return None
             
     def _extract_price(self, price_text: str) -> Optional[float]:
