@@ -187,6 +187,7 @@ data/out/*.parquet
 data/out/*.log
 data/images/
 .env
+data
 
 # Playwright
 .cache/
