@@ -1112,9 +1112,9 @@ class FoodScraperBot:
                             # Фильтруем только категории готовой еды
                             filtered_categories = [cat for cat in source_categories if any(
                                 keyword in cat.lower() for keyword in 
-                                ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня', 'кулинар', 'вторые', 'завтрак', 'закуск', 'сэндвич', 'ролл', 'онигири', 'пирог', 'окрошк', 'веган', 'белок', 'тарелк', 'новинк']
+                                ['готов', 'кулинар', 'салат', 'суп', 'блюд', 'еда', 'кухня', 'кулинар']
                             )]
-                            categories = filtered_categories[:10]  # Берем первые 10 категорий для большего количества товаров
+                            categories = filtered_categories[:5]  # Берем первые 5 категорий
                             self.logger.info(f"Отфильтрованные категории для {source_name}: {categories}")
                         except Exception as e:
                             self.logger.warning(f"Не удалось получить категории для {source_name}: {e}")

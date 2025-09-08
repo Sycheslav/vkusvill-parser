@@ -241,15 +241,13 @@ class SamokatScraper(BaseScraper):
                     if elements:
                         self.logger.info(f"[{self.__class__.__name__}] ✅ Найдено {len(elements)} элементов с селектором {selector}")
                         total_found = len(elements)
-                    else:
-                        self.logger.debug(f"[{self.__class__.__name__}] ❌ Элементы не найдены с селектором {selector}")
                         
-                        # Агрессивно обрабатываем все найденные товары
+                        # Обрабатываем все найденные товары
                         target_limit = limit or 1000  # Целевой лимит 1000 товаров
                         self.logger.info(f"[{self.__class__.__name__}] Обрабатываем {len(elements)} элементов с селектором {selector}")
                         
                         # Обрабатываем все найденные элементы
-                        for i, element in enumerate(elements):
+                        for j, element in enumerate(elements):
                             try:
                                 # Быстрое извлечение без детального парсинга
                                 product = await self._extract_product_fast(element, category)
@@ -273,56 +271,18 @@ class SamokatScraper(BaseScraper):
                         if len(products) >= target_limit:
                             self.logger.info(f"[{self.__class__.__name__}] Достигнут целевой лимит товаров: {len(products)}")
                             break
+                    else:
+                        self.logger.debug(f"[{self.__class__.__name__}] ❌ Элементы не найдены с селектором {selector}")
                 except Exception as e:
                     self.logger.debug(f"[{self.__class__.__name__}] Ошибка с селектором {selector}: {e}")
                     continue
             
-            # Если реальных товаров недостаточно, создаем качественные дополнительные
-            target_limit = 500  # Ограничиваем до 500 товаров для качества
-            if len(products) < target_limit:
-                self.logger.info(f"[{self.__class__.__name__}] Найдено {len(products)} реальных товаров, создаем качественные дополнительные до {target_limit}")
-                additional_needed = target_limit - len(products)
-                
-                # Список реальных названий блюд для создания качественных товаров
-                real_dish_names = [
-                    "Борщ украинский", "Суп харчо", "Солянка мясная", "Грибной суп", "Куриный суп",
-                    "Цезарь с курицей", "Греческий салат", "Оливье", "Винегрет", "Салат из свежих овощей",
-                    "Плов с бараниной", "Гуляш говяжий", "Котлеты по-киевски", "Бефстроганов", "Жаркое",
-                    "Пицца Маргарита", "Пицца Пепперони", "Пицца Четыре сыра", "Пицца Гавайская", "Пицца Мясная",
-                    "Пельмени сибирские", "Вареники с картошкой", "Манты", "Хинкали", "Равиоли",
-                    "Шашлык из свинины", "Шашлык из курицы", "Люля-кебаб", "Кебаб", "Донер",
-                    "Стейк из говядины", "Стейк из свинины", "Рыба на гриле", "Креветки в чесночном соусе", "Кальмары жареные",
-                    "Паста Карбонара", "Паста Болоньезе", "Паста с морепродуктами", "Ризотто с грибами", "Лазанья",
-                    "Блины с мясом", "Блины с творогом", "Блины с икрой", "Оладьи", "Сырники",
-                    "Чизкейк", "Тирамису", "Торт Наполеон", "Медовик", "Прага"
-                ]
-                
-                # Создаем качественные дополнительные товары
-                for i in range(additional_needed):
-                    try:
-                        # Выбираем случайное название блюда
-                        dish_name = real_dish_names[i % len(real_dish_names)]
-                        
-                        # Создаем качественный товар
-                        additional_product = ScrapedProduct(
-                            id=f"samokat_real_{i}_{int(time.time())}",
-                            name=dish_name,
-                            category=category,
-                            price=150.0 + (i * 15),  # Реалистичные цены
-                            shop="samokat",
-                            composition=f"Состав: {dish_name.lower()}",
-                            portion_g=300.0 + (i * 20),  # Реалистичные порции
-                            kcal_100g=250.0 + (i * 10),  # Реалистичные калории
-                            protein_100g=18.0 + (i * 0.5),
-                            fat_100g=12.0 + (i * 0.3),
-                            carb_100g=30.0 + (i * 1.0)
-                        )
-                        
-                        products.append(additional_product)
-                        
-                    except Exception as e:
-                        self.logger.warning(f"Ошибка создания дополнительного товара: {e}")
-                        continue
+            # Возвращаем только реальные товары, не создаем тестовые
+            if not products:
+                self.logger.warning(f"[{self.__class__.__name__}] Не найдено реальных товаров для категории {category}")
+                return []
+            
+            self.logger.info(f"[{self.__class__.__name__}] Найдено {len(products)} реальных товаров")
             
             self.logger.info(f"[{self.__class__.__name__}] Итого товаров: {len(products)}")
             return products
@@ -404,16 +364,96 @@ class SamokatScraper(BaseScraper):
                 except:
                     continue
             
-            # Извлекаем URL товара
+            # Извлекаем URL товара - максимально агрессивные селекторы
             url = ""
-            try:
-                link_elem = await element.query_selector('a[href]')
-                if link_elem:
-                    url = await link_elem.get_attribute('href') or ""
-                    if url and not url.startswith('http'):
-                        url = urljoin(self.base_url, url)
-            except:
-                pass
+            
+            # Метод 1: Поиск по всем возможным селекторам ссылок
+            link_selectors = [
+                'a[href]', '[href]', 'a', 
+                '.product-link', '.ProductLink', '.item-link', '.ItemLink',
+                '.card-link', '.CardLink', '.product-card a', '.ProductCard a',
+                '.product-item a', '.ProductItem a', '.catalog-item a', '.CatalogItem a',
+                '[data-href]', '[data-url]', '[data-link]', '[data-product-url]',
+                'a[class*="product"]', 'a[class*="item"]', 'a[class*="card"]',
+                'a[class*="Product"]', 'a[class*="Item"]', 'a[class*="Card"]',
+                'a[class*="link"]', 'a[class*="Link"]', 'a[class*="url"]',
+                'a[onclick]', 'a[data-click]', 'a[data-action]',
+                'button[data-href]', 'button[data-url]', 'div[data-href]',
+                'span[data-href]', 'div[onclick]', 'span[onclick]'
+            ]
+            
+            for selector in link_selectors:
+                try:
+                    link_elem = await element.query_selector(selector)
+                    if link_elem:
+                        # Пробуем разные атрибуты для получения ссылки
+                        href_attrs = ['href', 'data-href', 'data-url', 'data-link', 'data-product-url', 'data-action-url']
+                        for attr in href_attrs:
+                            url = await link_elem.get_attribute(attr) or ""
+                            if url and url.strip():
+                                break
+                        
+                        if url and url.strip():
+                            # Очищаем URL от лишних символов
+                            url = url.strip()
+                            # Если URL не полный, делаем его полным
+                            if not url.startswith('http'):
+                                url = urljoin(self.base_url, url)
+                            # Проверяем, что это валидная ссылка на товар
+                            if any(pattern in url for pattern in ['/product/', '/goods/', '/item/', '/catalog/', '.html', '/p/']):
+                                break
+                            else:
+                                url = ""  # Сбрасываем если не похоже на ссылку товара
+                except:
+                    continue
+            
+            # Метод 2: Если URL не найден, ищем в onclick событиях
+            if not url:
+                try:
+                    onclick_elem = await element.query_selector('[onclick]')
+                    if onclick_elem:
+                        onclick_text = await onclick_elem.get_attribute('onclick') or ""
+                        if onclick_text:
+                            # Ищем URL в onclick (например: "window.location='/product/123'")
+                            import re
+                            url_match = re.search(r"['\"]([^'\"]*/(?:product|goods|item|catalog)/[^'\"]*)['\"]", onclick_text)
+                            if url_match:
+                                url = url_match.group(1)
+                                if not url.startswith('http'):
+                                    url = urljoin(self.base_url, url)
+                except:
+                    pass
+            
+            # Метод 3: Если URL все еще не найден, ищем в data-атрибутах всего элемента
+            if not url:
+                try:
+                    data_attrs = ['data-href', 'data-url', 'data-link', 'data-product-url', 'data-action-url', 'data-product-id']
+                    for attr in data_attrs:
+                        url = await element.get_attribute(attr) or ""
+                        if url and url.strip():
+                            url = url.strip()
+                            if not url.startswith('http'):
+                                url = urljoin(self.base_url, url)
+                            if any(pattern in url for pattern in ['/product/', '/goods/', '/item/', '/catalog/', '.html', '/p/']):
+                                break
+                            else:
+                                url = ""
+                except:
+                    pass
+            
+            # Метод 4: Генерируем URL на основе ID товара если найден
+            if not url:
+                try:
+                    # Ищем ID товара в различных атрибутах
+                    id_attrs = ['data-product-id', 'data-id', 'data-item-id', 'id']
+                    for attr in id_attrs:
+                        product_id = await element.get_attribute(attr) or ""
+                        if product_id and product_id.strip():
+                            # Генерируем URL на основе ID
+                            url = f"{self.base_url}/product/{product_id.strip()}"
+                            break
+                except:
+                    pass
             
             # Извлекаем изображение
             image_url = ""
@@ -441,8 +481,7 @@ class SamokatScraper(BaseScraper):
                 '.product-description', '.ProductDescription', '.product-composition',
                 '.item-description', '.ItemDescription', '.card-description',
                 '.description', '.Description', '.composition', '.Composition',
-                '[class*="description"]', '[class*="composition"]', '.ingredients',
-                '.product-ingredients', '.item-ingredients', '.card-ingredients'
+                '[class*="description"]', '[class*="composition"]'
             ]
             
             for selector in comp_selectors:
@@ -451,28 +490,10 @@ class SamokatScraper(BaseScraper):
                     if comp_elem:
                         comp_text = await comp_elem.text_content()
                         if comp_text and len(comp_text.strip()) > 5:
-                            composition = comp_text.strip()[:300]  # Увеличиваем лимит
+                            composition = comp_text.strip()[:200]
                             break
                 except:
                     continue
-            
-            # Если состав не найден, пытаемся извлечь из всего текста элемента
-            if not composition:
-                try:
-                    full_text = await element.text_content()
-                    if full_text:
-                        # Ищем ключевые слова состава
-                        composition_keywords = ['состав:', 'ингредиенты:', 'содержит:', 'в состав входят:']
-                        for keyword in composition_keywords:
-                            if keyword in full_text.lower():
-                                # Извлекаем текст после ключевого слова
-                                start_idx = full_text.lower().find(keyword) + len(keyword)
-                                composition_text = full_text[start_idx:start_idx + 200].strip()
-                                if composition_text:
-                                    composition = composition_text
-                                    break
-                except:
-                    pass
             
             # Извлекаем вес/порцию
             portion_g = None
@@ -524,38 +545,6 @@ class SamokatScraper(BaseScraper):
                         product_id = f"samokat_{part}"
                         break
             
-            # Извлекаем пищевую ценность (калории, белки, жиры, углеводы)
-            kcal_100g = None
-            protein_100g = None
-            fat_100g = None
-            carb_100g = None
-            
-            # Ищем информацию о пищевой ценности в тексте элемента
-            try:
-                full_text = await element.text_content()
-                if full_text:
-                    # Ищем калории (ккал на 100г)
-                    kcal_match = re.search(r'(\d+)\s*ккал', full_text, re.IGNORECASE)
-                    if kcal_match:
-                        kcal_100g = float(kcal_match.group(1))
-                    
-                    # Ищем белки (г на 100г)
-                    protein_match = re.search(r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
-                    if protein_match:
-                        protein_100g = float(protein_match.group(1).replace(',', '.'))
-                    
-                    # Ищем жиры (г на 100г)
-                    fat_match = re.search(r'жир[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
-                    if fat_match:
-                        fat_100g = float(fat_match.group(1).replace(',', '.'))
-                    
-                    # Ищем углеводы (г на 100г)
-                    carb_match = re.search(r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)\s*г', full_text, re.IGNORECASE)
-                    if carb_match:
-                        carb_100g = float(carb_match.group(1).replace(',', '.'))
-            except:
-                pass
-            
             # Создаем продукт только если есть реальные данные
             if name != "Неизвестный товар" and (price or url):
                 product = ScrapedProduct(
@@ -566,12 +555,25 @@ class SamokatScraper(BaseScraper):
                     url=url,
                     shop="samokat",
                     composition=composition,
-                    portion_g=portion_g,
-                    kcal_100g=kcal_100g,
-                    protein_100g=protein_100g,
-                    fat_100g=fat_100g,
-                    carb_100g=carb_100g
+                    portion_g=portion_g
                 )
+                
+                # Если есть URL, получаем детальную информацию
+                if url and url.strip():
+                    try:
+                        detailed_product = await self.scrape_product_page(url)
+                        if detailed_product:
+                            # Обновляем базовую информацию детальной
+                            product.kcal_100g = detailed_product.kcal_100g
+                            product.protein_100g = detailed_product.protein_100g
+                            product.fat_100g = detailed_product.fat_100g
+                            product.carb_100g = detailed_product.carb_100g
+                            if detailed_product.portion_g:
+                                product.portion_g = detailed_product.portion_g
+                            if detailed_product.composition:
+                                product.composition = detailed_product.composition
+                    except Exception as e:
+                        self.logger.debug(f"Не удалось получить детальную информацию для {url}: {e}")
                 
                 return product
             
@@ -642,19 +644,40 @@ class SamokatScraper(BaseScraper):
                 except:
                     continue
             
-            # URL товара
-            link_selectors = ['a[href]', '[href]', 'a']
+            # URL товара - расширенные селекторы
+            link_selectors = [
+                'a[href]', '[href]', 'a', 
+                '.product-link', '.ProductLink', '.item-link', '.ItemLink',
+                '.card-link', '.CardLink', '.product-card a', '.ProductCard a',
+                '.product-item a', '.ProductItem a', '.catalog-item a', '.CatalogItem a',
+                '[data-href]', '[data-url]', '[data-link]',
+                'a[class*="product"]', 'a[class*="item"]', 'a[class*="card"]',
+                'a[class*="Product"]', 'a[class*="Item"]', 'a[class*="Card"]'
+            ]
             url = ""
             for selector in link_selectors:
                 try:
                     link_elem = await element.query_selector(selector)
                     if link_elem:
-                        url = await link_elem.get_attribute('href')
-                        if url:
+                        # Пробуем разные атрибуты для получения ссылки
+                        href_attrs = ['href', 'data-href', 'data-url', 'data-link']
+                        for attr in href_attrs:
+                            url = await link_elem.get_attribute(attr) or ""
+                            if url and url.strip():
+                                break
+                        
+                        if url and url.strip():
+                            # Очищаем URL от лишних символов
+                            url = url.strip()
+                            # Если URL не полный, делаем его полным
                             if not url.startswith('http'):
                                 url = urljoin(self.base_url, url)
-                            self.logger.info(f"[{self.__class__.__name__}] URL найден: {url}")
-                            break
+                            # Проверяем, что это валидная ссылка на товар
+                            if '/product/' in url or '/goods/' in url or '/item/' in url or url.endswith('.html'):
+                                self.logger.info(f"[{self.__class__.__name__}] URL найден: {url}")
+                                break
+                            else:
+                                url = ""  # Сбрасываем если не похоже на ссылку товара
                 except:
                     continue
                 
@@ -717,14 +740,267 @@ class SamokatScraper(BaseScraper):
             return None
             
     async def scrape_product_page(self, url: str) -> Optional[ScrapedProduct]:
-        """Скрапить детальную страницу продукта - отключено для ускорения"""
+        """Скрапить детальную страницу продукта для получения пищевой ценности"""
         try:
-            self.logger.info(f"[{self.__class__.__name__}] scrape_product_page отключен для ускорения")
-            return None
+            if not url or not url.strip():
+                return None
+                
+            self.logger.info(f"[{self.__class__.__name__}] Парсим детальную страницу: {url}")
+            
+            # Переходим на страницу товара
+            await self.page.goto(url, timeout=30000)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+            await asyncio.sleep(2)
+            
+            # Извлекаем пищевую ценность
+            nutrition_data = await self._extract_nutrition_data()
+            
+            # Извлекаем дополнительную информацию
+            composition = await self._extract_detailed_composition()
+            portion_g = await self._extract_detailed_portion()
+            brand = await self._extract_brand()
+            allergens = await self._extract_allergens()
+            
+            # Создаем продукт с детальной информацией
+            product = ScrapedProduct(
+                id=f"samokat_detailed_{hash(url)}",
+                name="",  # Будет заполнено из базовой информации
+                category="",  # Будет заполнено из базовой информации
+                kcal_100g=nutrition_data.get('kcal_100g'),
+                protein_100g=nutrition_data.get('protein_100g'),
+                fat_100g=nutrition_data.get('fat_100g'),
+                carb_100g=nutrition_data.get('carb_100g'),
+                portion_g=portion_g,
+                composition=composition,
+                url=url,
+                shop="samokat"
+            )
+            
+            self.logger.info(f"[{self.__class__.__name__}] Детальная информация извлечена: {nutrition_data}")
+            return product
             
         except Exception as e:
-            self.logger.error(f"Ошибка в отключенном scrape_product_page: {e}")
+            self.logger.error(f"Ошибка парсинга детальной страницы {url}: {e}")
             return None
+    
+    async def _extract_nutrition_data(self) -> Dict[str, Optional[float]]:
+        """Извлечь данные о пищевой ценности"""
+        nutrition_data = {
+            'kcal_100g': None,
+            'protein_100g': None,
+            'fat_100g': None,
+            'carb_100g': None
+        }
+        
+        try:
+            # Селекторы для пищевой ценности
+            nutrition_selectors = [
+                '.nutrition-table', '.nutrition-info', '.nutrition-facts',
+                '.product-nutrition', '.nutritional-info', '.nutrition',
+                '[class*="nutrition"]', '[class*="calorie"]', '[class*="protein"]',
+                '.kcal', '.calories', '.energy', '.protein', '.fat', '.carb'
+            ]
+            
+            for selector in nutrition_selectors:
+                try:
+                    nutrition_elem = await self.page.query_selector(selector)
+                    if nutrition_elem:
+                        # Ищем калории
+                        kcal_selectors = [
+                            '.kcal', '.calories', '.energy', '[class*="kcal"]', '[class*="calorie"]'
+                        ]
+                        for kcal_sel in kcal_selectors:
+                            kcal_elem = await nutrition_elem.query_selector(kcal_sel)
+                            if kcal_elem:
+                                kcal_text = await kcal_elem.text_content()
+                                if kcal_text:
+                                    kcal_match = re.search(r'(\d+(?:[.,]\d+)?)', kcal_text.replace(' ', ''))
+                                    if kcal_match:
+                                        nutrition_data['kcal_100g'] = float(kcal_match.group(1).replace(',', '.'))
+                                        break
+                        
+                        # Ищем белки
+                        protein_selectors = [
+                            '.protein', '[class*="protein"]', '.proteins'
+                        ]
+                        for prot_sel in protein_selectors:
+                            prot_elem = await nutrition_elem.query_selector(prot_sel)
+                            if prot_elem:
+                                prot_text = await prot_elem.text_content()
+                                if prot_text:
+                                    prot_match = re.search(r'(\d+(?:[.,]\d+)?)', prot_text.replace(' ', ''))
+                                    if prot_match:
+                                        nutrition_data['protein_100g'] = float(prot_match.group(1).replace(',', '.'))
+                                        break
+                        
+                        # Ищем жиры
+                        fat_selectors = [
+                            '.fat', '[class*="fat"]', '.fats'
+                        ]
+                        for fat_sel in fat_selectors:
+                            fat_elem = await nutrition_elem.query_selector(fat_sel)
+                            if fat_elem:
+                                fat_text = await fat_elem.text_content()
+                                if fat_text:
+                                    fat_match = re.search(r'(\d+(?:[.,]\d+)?)', fat_text.replace(' ', ''))
+                                    if fat_match:
+                                        nutrition_data['fat_100g'] = float(fat_match.group(1).replace(',', '.'))
+                                        break
+                        
+                        # Ищем углеводы
+                        carb_selectors = [
+                            '.carb', '.carbohydrate', '[class*="carb"]', '.carbs'
+                        ]
+                        for carb_sel in carb_selectors:
+                            carb_elem = await nutrition_elem.query_selector(carb_sel)
+                            if carb_elem:
+                                carb_text = await carb_elem.text_content()
+                                if carb_text:
+                                    carb_match = re.search(r'(\d+(?:[.,]\d+)?)', carb_text.replace(' ', ''))
+                                    if carb_match:
+                                        nutrition_data['carb_100g'] = float(carb_match.group(1).replace(',', '.'))
+                                        break
+                        
+                        break
+                except:
+                    continue
+            
+            # Если не нашли в специальных блоках, ищем по всему тексту страницы
+            if not any(nutrition_data.values()):
+                try:
+                    page_text = await self.page.text_content('body')
+                    if page_text:
+                        # Ищем калории в тексте
+                        kcal_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:ккал|kcal|калори)', page_text, re.IGNORECASE)
+                        if kcal_match:
+                            nutrition_data['kcal_100g'] = float(kcal_match.group(1).replace(',', '.'))
+                        
+                        # Ищем белки в тексте
+                        protein_match = re.search(r'белк[аиы]?\s*(\d+(?:[.,]\d+)?)', page_text, re.IGNORECASE)
+                        if protein_match:
+                            nutrition_data['protein_100g'] = float(protein_match.group(1).replace(',', '.'))
+                        
+                        # Ищем жиры в тексте
+                        fat_match = re.search(r'жир[аы]?\s*(\d+(?:[.,]\d+)?)', page_text, re.IGNORECASE)
+                        if fat_match:
+                            nutrition_data['fat_100g'] = float(fat_match.group(1).replace(',', '.'))
+                        
+                        # Ищем углеводы в тексте
+                        carb_match = re.search(r'углевод[аы]?\s*(\d+(?:[.,]\d+)?)', page_text, re.IGNORECASE)
+                        if carb_match:
+                            nutrition_data['carb_100g'] = float(carb_match.group(1).replace(',', '.'))
+                except:
+                    pass
+            
+        except Exception as e:
+            self.logger.error(f"Ошибка извлечения пищевой ценности: {e}")
+        
+        return nutrition_data
+    
+    async def _extract_detailed_composition(self) -> str:
+        """Извлечь детальный состав"""
+        try:
+            composition_selectors = [
+                '.composition', '.ingredients', '.product-composition',
+                '.ingredient-list', '.product-ingredients', '[class*="composition"]',
+                '[class*="ingredient"]', '.product-description'
+            ]
+            
+            for selector in composition_selectors:
+                try:
+                    comp_elem = await self.page.query_selector(selector)
+                    if comp_elem:
+                        comp_text = await comp_elem.text_content()
+                        if comp_text and len(comp_text.strip()) > 10:
+                            return comp_text.strip()[:500]
+                except:
+                    continue
+        except:
+            pass
+        
+        return ""
+    
+    async def _extract_detailed_portion(self) -> Optional[float]:
+        """Извлечь детальный вес порции"""
+        try:
+            weight_selectors = [
+                '.weight', '.portion', '.product-weight', '.product-portion',
+                '[class*="weight"]', '[class*="portion"]', '.size', '.volume'
+            ]
+            
+            for selector in weight_selectors:
+                try:
+                    weight_elem = await self.page.query_selector(selector)
+                    if weight_elem:
+                        weight_text = await weight_elem.text_content()
+                        if weight_text:
+                            # Ищем число с единицами измерения
+                            weight_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:г|гр|g|кг|kg|мл|ml|л|l)', weight_text, re.IGNORECASE)
+                            if weight_match:
+                                weight_value = float(weight_match.group(1).replace(',', '.'))
+                                unit = weight_match.group(0).lower()
+                                
+                                # Конвертируем в граммы
+                                if 'кг' in unit or 'kg' in unit:
+                                    weight_value *= 1000
+                                elif 'л' in unit or 'l' in unit:
+                                    weight_value *= 1000  # Приблизительно для жидкостей
+                                elif 'мл' in unit or 'ml' in unit:
+                                    pass  # Уже в граммах
+                                
+                                return weight_value
+                except:
+                    continue
+        except:
+            pass
+        
+        return None
+    
+    async def _extract_brand(self) -> str:
+        """Извлечь бренд"""
+        try:
+            brand_selectors = [
+                '.brand', '.manufacturer', '.producer', '.product-brand',
+                '[class*="brand"]', '[class*="manufacturer"]'
+            ]
+            
+            for selector in brand_selectors:
+                try:
+                    brand_elem = await self.page.query_selector(selector)
+                    if brand_elem:
+                        brand_text = await brand_elem.text_content()
+                        if brand_text and len(brand_text.strip()) > 2:
+                            return brand_text.strip()[:100]
+                except:
+                    continue
+        except:
+            pass
+        
+        return ""
+    
+    async def _extract_allergens(self) -> List[str]:
+        """Извлечь аллергены"""
+        try:
+            allergen_selectors = [
+                '.allergens', '.allergen-info', '.product-allergens',
+                '[class*="allergen"]', '.warning', '.contains'
+            ]
+            
+            for selector in allergen_selectors:
+                try:
+                    allergen_elem = await self.page.query_selector(selector)
+                    if allergen_elem:
+                        allergen_text = await allergen_elem.text_content()
+                        if allergen_text:
+                            # Разбиваем на список аллергенов
+                            allergens = [a.strip() for a in allergen_text.split(',') if a.strip()]
+                            return allergens[:10]  # Ограничиваем количество
+                except:
+                    continue
+        except:
+            pass
+        
+        return []
             
     def _extract_price(self, price_text: str) -> Optional[float]:
         """Извлечь цену из текста"""
