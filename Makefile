@@ -1,194 +1,157 @@
-.PHONY: help install test clean run-samokat run-all test-all-sources run-bot docker-build docker-run
+# Makefile для Ready Food Scraper
+
+.PHONY: help install install-dev setup test lint format clean build run run-dev docker-build docker-run docker-stop docker-clean
 
 # Переменные
-PYTHON = python3
-PIP = pip3
-PYTEST = pytest
-PLAYWRIGHT = playwright
+PYTHON := python3.11
+PIP := pip
+DOCKER_IMAGE := ready-food-scraper
+DOCKER_CONTAINER := ready-food-scraper
 
-# Цвета для вывода
-GREEN = \033[0;32m
-YELLOW = \033[1;33m
-RED = \033[0;31m
-NC = \033[0m # No Color
-
-help: ## Показать справку
-	@echo "$(GREEN)Доступные команды:$(NC)"
+# Помощь
+help:
+	@echo "Ready Food Scraper - команды сборки и запуска"
 	@echo ""
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo "Установка и настройка:"
+	@echo "  install        Установка зависимостей"
+	@echo "  install-dev    Установка зависимостей для разработки"
+	@echo "  setup          Полная настройка окружения"
+	@echo "  install-browser Установка браузера Playwright"
+	@echo ""
+	@echo "Разработка:"
+	@echo "  test           Запуск тестов"
+	@echo "  lint           Проверка кода линтерами"
+	@echo "  format         Форматирование кода"
+	@echo "  clean          Очистка временных файлов"
+	@echo ""
+	@echo "Запуск:"
+	@echo "  run            Запуск скрейпинга (все магазины)"
+	@echo "  run-samokat    Запуск скрейпинга Самокат"
+	@echo "  run-lavka      Запуск скрейпинга Яндекс Лавка"
+	@echo "  run-vkusvill   Запуск скрейпинга ВкусВилл"
+	@echo "  run-dev        Запуск в режиме разработки"
+	@echo ""
+	@echo "Docker:"
+	@echo "  docker-build   Сборка Docker образа"
+	@echo "  docker-run     Запуск в Docker"
+	@echo "  docker-stop    Остановка Docker контейнера"
+	@echo "  docker-clean   Очистка Docker ресурсов"
+	@echo ""
+	@echo "Утилиты:"
+	@echo "  validate-config Валидация конфигурации"
+	@echo "  cleanup-images  Очистка старых изображений"
 
-install: ## Установить зависимости
-	@echo "$(GREEN)Устанавливаем зависимости...$(NC)"
+# Установка зависимостей
+install:
 	$(PIP) install -r requirements.txt
-	@echo "$(GREEN)Устанавливаем браузеры Playwright...$(NC)"
-	$(PLAYWRIGHT) install chromium
-	@echo "$(GREEN)Установка завершена!$(NC)"
 
-install-dev: ## Установить зависимости для разработки
-	@echo "$(GREEN)Устанавливаем зависимости для разработки...$(NC)"
-	$(PIP) install -r requirements.txt
+install-dev:
 	$(PIP) install -r requirements-dev.txt
-	$(PLAYWRIGHT) install chromium
-	@echo "$(GREEN)Установка завершена!$(NC)"
 
-test: ## Запустить тесты
-	@echo "$(GREEN)Запускаем тесты...$(NC)"
-	$(PYTEST) tests/ -v
+install-browser:
+	playwright install chromium
 
-test-bot: ## Тестировать Telegram бота
-	@echo "$(GREEN)Тестируем Telegram бота...$(NC)"
-	$(PYTHON) test_telegram_bot.py
+setup: install install-browser
+	@echo "Создание необходимых директорий..."
+	mkdir -p data images logs
+	@echo "Копирование примера конфигурации..."
+	@if [ ! -f .env ]; then cp env-example.txt .env; fi
+	@echo "Настройка завершена!"
 
-test-coverage: ## Запустить тесты с покрытием
-	@echo "$(GREEN)Запускаем тесты с покрытием...$(NC)"
-	$(PYTEST) tests/ --cov=src --cov-report=html --cov-report=term
+# Разработка
+test:
+	pytest tests/ -v --cov=app --cov-report=html --cov-report=term
 
-quick-test: ## Быстрый тест основных функций
-	@echo "$(GREEN)Запускаем быстрый тест...$(NC)"
-	$(PYTHON) quick_test.py
+lint:
+	flake8 app/ tests/
+	mypy app/
 
-clean: ## Очистить временные файлы
-	@echo "$(GREEN)Очищаем временные файлы...$(NC)"
+format:
+	black app/ tests/
+	isort app/ tests/
+
+clean:
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -delete
-	find . -type d -name "*.egg-info" -delete
-	rm -rf .pytest_cache
-	rm -rf htmlcov
-	rm -rf .coverage
-	@echo "$(GREEN)Очистка завершена!$(NC)"
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	rm -rf build/ dist/ .coverage htmlcov/ .pytest_cache/
 
-clean-data: ## Очистить данные
-	@echo "$(YELLOW)ВНИМАНИЕ: Удаляем все данные!$(NC)"
-	rm -rf data/out/*
-	rm -rf data/images/*
-	@echo "$(GREEN)Данные очищены!$(NC)"
+# Запуск
+run:
+	$(PYTHON) -m app scrape --shop all --city "Москва" --address "Красная площадь, 1" --out data/foods.csv
 
-run-samokat: ## Запустить скрапинг Самоката
-	@echo "$(GREEN)Запускаем скрапинг Самоката...$(NC)"
-	$(PYTHON) -m src.main --source samokat --city "Москва" --out data/out/samokat.csv
+run-samokat:
+	$(PYTHON) -m app scrape --shop samokat --city "Москва" --address "Красная площадь, 1" --out data/samokat.csv
 
-run-lavka: ## Запустить скрапинг Яндекс.Лавки
-	@echo "$(GREEN)Запускаем скрапинг Яндекс.Лавки...$(NC)"
-	$(PYTHON) -m src.main --source lavka --city "Москва" --out data/out/lavka.csv
+run-lavka:
+	$(PYTHON) -m app scrape --shop lavka --city "Москва" --address "Красная площадь, 1" --out data/lavka.csv
 
-run-vkusvill: ## Запустить скрапинг ВкусВилла
-	@echo "$(GREEN)Запускаем скрапинг ВкусВилла...$(NC)"
-	$(PYTHON) -m src.main --source vkusvill --city "Москва" --out data/out/vkusvill.csv
+run-vkusvill:
+	$(PYTHON) -m app scrape --shop vkusvill --city "Москва" --address "Красная площадь, 1" --out data/vkusvill.csv
 
-run-all: ## Запустить скрапинг всех источников
-	@echo "$(GREEN)Запускаем скрапинг всех источников...$(NC)"
-	$(PYTHON) -m src.main --source all --city "Москва" --out data/out/all_sources.sqlite
+run-dev:
+	$(PYTHON) -m app scrape --shop samokat --city "Москва" --address "Красная площадь, 1" --out data/foods.csv --no-headless --log-level DEBUG
 
-run-all-with-images: ## Запустить скрапинг всех источников с загрузкой изображений
-	@echo "$(GREEN)Запускаем скрапинг всех источников с изображениями...$(NC)"
-	$(PYTHON) -m src.main --source all --city "Москва" --download-images --out data/out/all_sources.sqlite
+run-with-images:
+	$(PYTHON) -m app scrape --shop all --city "Москва" --address "Красная площадь, 1" --out data/foods.csv --download-images
 
-test-all-sources: ## Тестирование всех источников
-	@echo "$(GREEN)Тестируем все источники...$(NC)"
-	$(PYTHON) test_all_sources.py
+# Docker
+docker-build:
+	docker build -t $(DOCKER_IMAGE) .
 
-run-bot: ## Запустить Telegram бота
-	@echo "$(GREEN)Запускаем Telegram бота...$(NC)"
-	$(PYTHON) run_bot.py
+docker-run: docker-build
+	docker-compose up scraper
 
-test-samokat-only: ## Тестирование только Самоката
-	@echo "$(GREEN)Тестируем Самокат...$(NC)"
-	$(PYTHON) -m src.main --source samokat --city "Москва" --limit 10 --out data/out/test_samokat.csv
+docker-run-detached: docker-build
+	docker-compose up -d scraper
 
-test-lavka-only: ## Тестирование только Яндекс.Лавки
-	@echo "$(GREEN)Тестируем Яндекс.Лавку...$(NC)"
-	$(PYTHON) -m src.main --source lavka --city "Москва" --limit 10 --out data/out/test_lavka.csv
+docker-stop:
+	docker-compose down
 
-test-vkusvill-only: ## Тестирование только ВкусВилла
-	@echo "$(GREEN)Тестируем ВкусВилл...$(NC)"
-	$(PYTHON) -m src.main --source vkusvill --city "Москва" --limit 10 --out data/out/test_vkusvill.csv
+docker-clean:
+	docker-compose down --rmi all --volumes --remove-orphans
+	docker system prune -f
 
-docker-build: ## Собрать Docker образ
-	@echo "$(GREEN)Собираем Docker образ...$(NC)"
-	docker build -t food-scraper .
+# Специальные задачи Docker
+docker-task:
+	docker-compose run --rm scraper-task scrape --shop all --city "Москва" --out data/foods.csv
 
-docker-run: ## Запустить Docker контейнер
-	@echo "$(GREEN)Запускаем Docker контейнер...$(NC)"
-	docker run -it --rm -v $(PWD)/data:/app/data food-scraper --help
+docker-samokat:
+	docker-compose run --rm scraper-task scrape --shop samokat --city "Москва" --out data/samokat.csv
 
-docker-run-samokat: ## Запустить скрапинг Самоката в Docker
-	@echo "$(GREEN)Запускаем скрапинг Самоката в Docker...$(NC)"
-	docker run -it --rm -v $(PWD)/data:/app/data food-scraper --source samokat --city "Москва" --out data/out/samokat.csv
+docker-lavka:
+	docker-compose run --rm scraper-task scrape --shop lavka --city "Москва" --out data/lavka.csv
 
-docker-run-all: ## Запустить скрапинг всех источников в Docker
-	@echo "$(GREEN)Запускаем скрапинг всех источников в Docker...$(NC)"
-	docker run -it --rm -v $(PWD)/data:/app/data food-scraper --source all --city "Москва" --download-images --out data/out/all_sources.sqlite
+docker-vkusvill:
+	docker-compose run --rm scraper-task scrape --shop vkusvill --city "Москва" --out data/vkusvill.csv
 
-docker-compose-up: ## Запустить через docker-compose
-	@echo "$(GREEN)Запускаем через docker-compose...$(NC)"
-	docker-compose up food-scraper
+# Утилиты
+validate-config:
+	$(PYTHON) -m app validate-config
 
-# Команды для Telegram бота
-run-bot: ## Запустить Telegram бота
-	@echo "$(GREEN)Запускаем Telegram бота...$(NC)"
-	@echo "$(YELLOW)Убедитесь, что в config.yaml указан telegram_bot_token!$(NC)"
-	$(PYTHON) run_telegram_bot.py
+cleanup-images:
+	$(PYTHON) -m app cleanup-images --days 7
 
-run-bot-dev: ## Запустить Telegram бота в режиме разработки
-	@echo "$(GREEN)Запускаем Telegram бота в режиме разработки...$(NC)"
-	@echo "$(YELLOW)Убедитесь, что в config.yaml указан telegram_bot_token!$(NC)"
-	$(PYTHON) run_telegram_bot.py --dev
+# Примеры запуска с различными параметрами
+example-spb:
+	$(PYTHON) -m app scrape --shop all --city "Санкт-Петербург" --address "Невский проспект, 1" --out data/spb_foods.csv
 
-install-bot: ## Установить зависимости для Telegram бота
-	@echo "$(GREEN)Устанавливаем зависимости для Telegram бота...$(NC)"
-	$(PIP) install python-telegram-bot==20.7
-	@echo "$(GREEN)Зависимости для бота установлены!$(NC)"
+example-with-proxy:
+	$(PYTHON) -m app scrape --shop samokat --city "Москва" --proxy "http://proxy:8080" --out data/foods.csv
 
-bot-setup: ## Настройка Telegram бота
-	@echo "$(GREEN)Настройка Telegram бота...$(NC)"
-	@echo "$(YELLOW)1. Создайте бота через @BotFather в Telegram$(NC)"
-	@echo "$(YELLOW)2. Получите токен бота$(NC)"
-	@echo "$(YELLOW)3. Добавьте токен в config.yaml или .env файл$(NC)"
-	@echo "$(YELLOW)4. Запустите бота командой: make run-bot$(NC)"
+example-parallel:
+	$(PYTHON) -m app scrape --shop all --city "Москва" --parallel 6 --out data/foods.csv
 
-docker-compose-samokat: ## Запустить скрапинг Самоката через docker-compose
-	@echo "$(GREEN)Запускаем скрапинг Самоката через docker-compose...$(NC)"
-	docker-compose up samokat-scraper
+example-formats:
+	$(PYTHON) -m app scrape --shop all --city "Москва" --format csv json parquet --out data/foods.csv
 
-docker-compose-all: ## Запустить скрапинг всех источников через docker-compose
-	@echo "$(GREEN)Запускаем скрапинг всех источников через docker-compose...$(NC)"
-	docker-compose up all-sources-scraper
+# Сборка пакета
+build:
+	$(PYTHON) -m build
 
-setup-env: ## Настроить переменные окружения
-	@echo "$(GREEN)Настраиваем переменные окружения...$(NC)"
-	@if [ ! -f .env ]; then \
-		cp env-example.txt .env; \
-		echo "$(GREEN)Файл .env создан из env-example.txt$(NC)"; \
-		echo "$(YELLOW)Отредактируйте .env для настройки параметров$(NC)"; \
-	else \
-		echo "$(YELLOW)Файл .env уже существует$(NC)"; \
-	fi
+# Публикация (для разработчиков)
+publish-test:
+	$(PYTHON) -m twine upload --repository testpypi dist/*
 
-check-deps: ## Проверить зависимости
-	@echo "$(GREEN)Проверяем зависимости...$(NC)"
-	@$(PYTHON) -c "import playwright" 2>/dev/null || echo "$(RED)Playwright не установлен$(NC)"
-	@$(PYTHON) -c "import click" 2>/dev/null || echo "$(RED)Click не установлен$(NC)"
-	@$(PYTHON) -c "import pandas" 2>/dev/null || echo "$(RED)Pandas не установлен$(NC)"
-	@echo "$(GREEN)Проверка завершена!$(NC)"
-
-stats: ## Показать статистику данных
-	@echo "$(GREEN)Статистика данных:$(NC)"
-	@if [ -f data/out/products.db ]; then \
-		$(PYTHON) -c "from src.utils.storage import DataStorage; s = DataStorage(); print(s.get_statistics())"; \
-	else \
-		echo "$(YELLOW)База данных не найдена$(NC)"; \
-	fi
-
-format: ## Форматировать код
-	@echo "$(GREEN)Форматируем код...$(NC)"
-	black src/ tests/
-	isort src/ tests/
-
-lint: ## Проверить код линтером
-	@echo "$(GREEN)Проверяем код линтером...$(NC)"
-	flake8 src/ tests/
-	black --check src/ tests/
-	isort --check-only src/ tests/
-
-# Команды по умолчанию
-.DEFAULT_GOAL := help
+publish:
+	$(PYTHON) -m twine upload dist/*

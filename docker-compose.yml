@@ -1,44 +1,67 @@
+# Docker Compose для Ready Food Scraper
+
 version: '3.8'
 
 services:
-  food-scraper:
+  scraper:
     build: .
-    container_name: food-scraper
+    container_name: ready-food-scraper
     volumes:
-      # Монтируем директории для данных
       - ./data:/app/data
-      # Монтируем конфигурацию
+      - ./images:/app/images
+      - ./logs:/app/logs
       - ./config.yaml:/app/config.yaml:ro
-      # Монтируем переменные окружения
-      - ./.env:/app/.env:ro
     environment:
-      - PYTHONPATH=/app
-      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
-    # Для отладки можно раскомментировать
-    # stdin_open: true
-    # tty: true
-    # command: ["--help"]
+      - BROWSER_HEADLESS=true
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    command: >
+      scrape 
+      --shop all 
+      --city "Москва" 
+      --address "Красная площадь, 1"
+      --out data/foods.csv
+      --format csv json
+      --parallel 3
+    restart: "no"
     
-  # Пример запуска с конкретными параметрами
-  samokat-scraper:
+  # Сервис для разовых задач
+  scraper-task:
     build: .
-    container_name: samokat-scraper
+    container_name: ready-food-scraper-task
     volumes:
       - ./data:/app/data
+      - ./images:/app/images
+      - ./logs:/app/logs
       - ./config.yaml:/app/config.yaml:ro
-    command: ["--source", "samokat", "--city", "Москва", "--out", "data/out/samokat.csv"]
     environment:
-      - PYTHONPATH=/app
-      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
-      
-  # Пример запуска всех источников
-  all-sources-scraper:
+      - BROWSER_HEADLESS=true
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    profiles:
+      - task
+    restart: "no"
+
+  # Сервис для периодического запуска (с cron)
+  scraper-cron:
     build: .
-    container_name: all-sources-scraper
+    container_name: ready-food-scraper-cron
     volumes:
       - ./data:/app/data
+      - ./images:/app/images
+      - ./logs:/app/logs
       - ./config.yaml:/app/config.yaml:ro
-    command: ["--source", "all", "--city", "Москва", "--download-images", "--out", "data/out/all_sources.sqlite"]
+      - ./scripts/crontab:/etc/cron.d/scraper-cron:ro
     environment:
-      - PYTHONPATH=/app
-      - PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
+      - BROWSER_HEADLESS=true
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    profiles:
+      - cron
+    command: cron -f
+    restart: unless-stopped
+
+volumes:
+  data:
+  images:
+  logs:

@@ -155,43 +155,26 @@ cython_debug/
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
-#  project, it is recommended to include the following files:
-#  .idea/
-#  *.iml
-#  *.ipr
-#  *.iws
-#  .idea/
+#  project, it is possible to generate the gitignore file in the project root directory.
+#  See https://www.jetbrains.com/help/pycharm/
+.idea/
 
-# VS Code
-.vscode/
+# Project specific
+data/
+images/
+logs/
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.md
+!README.md
+!LICENSE.md
 
-# macOS
+# OS
 .DS_Store
-.AppleDouble
-.LSOverride
-
-# Windows
 Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Linux
-*~
-
-# Проект-специфичные файлы
-data/out/*.db
-data/out/*.csv
-data/out/*.jsonl
-data/out/*.sqlite
-data/out/*.parquet
-data/out/*.log
-data/images/
-.env
-data
 
 # Playwright
-.cache/
-ms-playwright/
-
-# Docker
-.dockerignore
+playwright-report/
+test-results/

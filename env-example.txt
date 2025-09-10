@@ -1,22 +1,33 @@
-# Настройки города и адреса
-CITY_NAME=Москва
-
-
-# Тайминги и ограничения
-THROTTLE_MIN=1.0
-THROTTLE_MAX=2.0
-SCROLL_DELAY_MIN=1.0
-SCROLL_DELAY_MAX=1.5
-MAX_HOURS=10
-MAX_CONCURRENT=2
+# Пример переменных окружения для скрейпера готовой еды
 
 # Настройки браузера
-HEADLESS=1
+BROWSER_HEADLESS=true
+BROWSER_TIMEOUT=30000
 
-# Настройки логирования
+# Настройки скрейпинга
+PARALLEL_WORKERS=3
+REQUEST_DELAY_MIN=1.0
+REQUEST_DELAY_MAX=3.0
+MAX_RETRIES=3
+
+# Локация по умолчанию
+DEFAULT_CITY=Москва
+DEFAULT_ADDRESS=Красная площадь, 1
+DEFAULT_LAT=55.7558
+DEFAULT_LON=37.6176
+
+# Прокси (опционально)
+PROXY_ENABLED=false
+PROXY_SERVERS=
+
+# Настройки экспорта
+DOWNLOAD_IMAGES=false
+IMAGES_DIR=images
+
+# Логирование
 LOG_LEVEL=INFO
-LOG_FILE=data/out/scraper.log
+LOG_FILE=logs/scraper.log
 
-# Настройки Telegram бота
-TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
-TELEGRAM_ALLOWED_USERS=123456789,987654321
+# API ключи (если потребуются)
+# TELEGRAM_BOT_TOKEN=
+# WEBHOOK_URL=
