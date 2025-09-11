@@ -1,13 +1,9 @@
-playwright>=1.40.0
-pydantic>=2.5.0
-click>=8.1.0
-pyyaml>=6.0
-pandas>=2.0.0
-pyarrow>=14.0.0
-aiohttp>=3.9.0
-asyncio-throttle>=1.0.0
-loguru>=0.7.0
-python-dotenv>=1.0.0
-fake-useragent>=1.4.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
+# Основные зависимости для скрейпинга готовой еды
+httpx>=0.27.0
+selectolax>=0.3.20
+tenacity>=8.2.0
+
+# Дополнительные зависимости (опционально)
+# playwright>=1.40.0  # Для рендеринга JS (только если нужен)
+# pandas>=2.0.0       # Для работы с данными (если потребуется)
+
