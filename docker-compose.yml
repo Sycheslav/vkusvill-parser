@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  # Telegram бот
+  vkusvill-bot:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TELEGRAM_BOT_TOKEN=$7657488971:AAFNaNjweijtQO6_LQrZ0RJRyEvnLUBkTM4
+    command: python3 telegram_bot.py
+    restart: unless-stopped
+
   # Быстрый парсер по адресу
   vkusvill-fast:
     build: .
