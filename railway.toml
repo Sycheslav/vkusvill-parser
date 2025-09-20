@@ -1,0 +1,12 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "python3 address.py 'Москва, Красная площадь, 1' 1500"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "never"
+
+[env]
+PYTHONPATH = "/app"
+PYTHONUNBUFFERED = "1"

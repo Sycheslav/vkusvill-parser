@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  # Быстрый парсер по адресу
+  vkusvill-fast:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    command: python3 address.py "Москва, Тверская улица, 12" 1000
+    
+  # Полный парсер
+  vkusvill-full:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    command: python3 moscow.py 1500
+    
+  # Интерактивный режим
+  vkusvill-shell:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    command: bash
+    stdin_open: true
+    tty: true

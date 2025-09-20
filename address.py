@@ -115,7 +115,7 @@ class VkusvillFastParser:
             # Поиск последнего файла тяжелого парсера
             data_dir = Path("data")
             if data_dir.exists():
-                heavy_files = list(data_dir.glob("moscow_heavy_*.csv"))
+                heavy_files = list(data_dir.glob("moscow_improved_*.csv"))
                 if heavy_files:
                     heavy_file_path = str(sorted(heavy_files)[-1])  # Последний файл
         
@@ -133,44 +133,95 @@ class VkusvillFastParser:
             print("⚠️ База тяжелого парсера не найдена, работаем только с каталогом")
     
     async def scrape_fast(self, city: str, coords: str, address: str = None, limit: int = 100) -> List[Dict]:
-        """Быстрый парсинг используя базу тяжелого парсера."""
+        """Быстрый парсинг - сначала проверяем доступность по адресу, потом сопоставляем с базой."""
         print(f"⚡ Начинаем быстрый парсинг на {limit} товаров...")
         print(f"📍 Локация: {address or city}")
-        
-        # Если есть база тяжелого парсера - используем её
-        if self.heavy_data:
-            print(f"📚 Используем базу тяжелого парсера: {len(self.heavy_data)} товаров")
-            products = []
-            
-            for product_id, heavy_product in list(self.heavy_data.items())[:limit]:
-                product = {
-                    'id': heavy_product.get('id', product_id),
-                    'name': heavy_product.get('name', ''),
-                    'price': heavy_product.get('price', ''),
-                    'category': heavy_product.get('category', 'Готовая еда'),
-                    'url': heavy_product.get('url', ''),
-                    'shop': 'vkusvill_fast',
-                    'photo': heavy_product.get('photo', ''),
-                    'composition': heavy_product.get('composition', ''),
-                    'tags': heavy_product.get('tags', ''),
-                    'portion_g': heavy_product.get('portion_g', ''),
-                    'kcal_100g': heavy_product.get('kcal_100g', ''),
-                    'protein_100g': heavy_product.get('protein_100g', ''),
-                    'fat_100g': heavy_product.get('fat_100g', ''),
-                    'carb_100g': heavy_product.get('carb_100g', '')
-                }
-                products.append(product)
-            
-            print(f"⚡ Быстрый парсинг завершен: {len(products)} товаров из базы")
-            return products
-        
-        # Если базы нет - пробуем парсить каталог
-        print("⚠️ База тяжелого парсера пуста, пробуем парсить каталог...")
         
         # Установка локации
         await self._set_location(city, coords)
         
+        # Сначала получаем список доступных товаров по адресу
+        print(f"🔍 Проверяем доступность товаров по адресу...")
+        available_product_ids = await self._get_available_products(coords)
+        print(f"📦 По адресу доступно: {len(available_product_ids)} товаров")
+        
+        products = []
+        
+        # Если есть база тяжелого парсера - сопоставляем с доступными товарами
+        if self.heavy_data and available_product_ids:
+            print(f"📚 Сопоставляем с базой тяжелого парсера...")
+            matched_count = 0
+            
+            for product_id in available_product_ids[:limit]:
+                if product_id in self.heavy_data:
+                    heavy_product = self.heavy_data[product_id]
+                    product = {
+                        'id': heavy_product.get('id', product_id),
+                        'name': heavy_product.get('name', ''),
+                        'price': heavy_product.get('price', ''),
+                        'category': heavy_product.get('category', 'Готовая еда'),
+                        'url': heavy_product.get('url', ''),
+                        'shop': 'vkusvill_address',
+                        'photo': heavy_product.get('photo', ''),
+                        'composition': heavy_product.get('composition', ''),
+                        'tags': heavy_product.get('tags', ''),
+                        'portion_g': heavy_product.get('portion_g', ''),
+                        'kcal_100g': heavy_product.get('kcal_100g', ''),
+                        'protein_100g': heavy_product.get('protein_100g', ''),
+                        'fat_100g': heavy_product.get('fat_100g', ''),
+                        'carb_100g': heavy_product.get('carb_100g', '')
+                    }
+                    products.append(product)
+                    matched_count += 1
+            
+            print(f"✅ Сопоставлено с базой: {matched_count} товаров")
+            print(f"⚡ Быстрый парсинг завершен: {len(products)} товаров")
+            return products
+        
+        # Если базы нет - пробуем парсить каталог
+        print("⚠️ База тяжелого парсера пуста, пробуем парсить каталог...")
+        return await self._fallback_catalog_parsing(limit)
+    
+    async def _get_available_products(self, coords: str) -> List[str]:
+        """Получение списка доступных товаров по адресу."""
+        available_ids = []
+        
         # Категории готовой еды
+        categories = [
+            "/goods/gotovaya-eda/",
+            "/goods/gotovaya-eda/salaty/",
+            "/goods/gotovaya-eda/supy/",
+            "/goods/gotovaya-eda/vtorye-blyuda/",
+            "/goods/gotovaya-eda/zavtraki/",
+        ]
+        
+        for category in categories:
+            try:
+                url = f"{self.BASE_URL}{category}"
+                response = await self.antibot_client.request(method="GET", url=url)
+                
+                if response.status_code == 200 and HTMLParser:
+                    parser = HTMLParser(response.text)
+                    
+                    # Ищем все ссылки на товары
+                    product_links = parser.css('a[href*="/goods/"][href$=".html"]')
+                    
+                    for link in product_links:
+                        href = link.attributes.get('href')
+                        if href:
+                            product_id = self._extract_id_from_url(urljoin(self.BASE_URL, href))
+                            if product_id and product_id not in available_ids:
+                                available_ids.append(product_id)
+                
+                await asyncio.sleep(0.5)  # Пауза между категориями
+                
+            except Exception as e:
+                print(f"   ❌ Ошибка категории {category}: {e}")
+        
+        return available_ids
+    
+    async def _fallback_catalog_parsing(self, limit: int) -> List[Dict]:
+        """Резервный парсинг каталога если нет базы."""
         categories = [
             "/goods/gotovaya-eda/",
             "/goods/gotovaya-eda/salaty/",
@@ -342,7 +393,7 @@ class VkusvillFastParser:
                     match = re.search(r'(\d+(?:[.,]\d+)?)', price_text)
                     if match:
                         price = match.group(1).replace(',', '.')
-                break
+                        break
             
             # Фото товара (если есть в блоке)
             photo = ""
@@ -352,7 +403,7 @@ class VkusvillFastParser:
                 if src:
                     photo = urljoin(self.BASE_URL, src)
             
-            if not name or not price:
+            if not name:
                 return None
             
             return {
@@ -509,9 +560,9 @@ async def main():
         print(f"   • CSV: {csv_file}")
         print(f"   • JSONL: {jsonl_file}")
                 
-        except KeyboardInterrupt:
+    except KeyboardInterrupt:
         print("\n⚠️ Парсинг прерван пользователем")
-        except Exception as e:
+    except Exception as e:
         print(f"❌ Ошибка быстрого парсинга: {e}")
         import traceback
         traceback.print_exc()
