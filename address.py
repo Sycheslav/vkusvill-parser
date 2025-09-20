@@ -453,7 +453,7 @@ async def main():
         # Геокодирование адреса
         city, coords = await get_location_from_address(address)
         if not coords:
-        return
+            return
     
     logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
     
@@ -471,7 +471,7 @@ async def main():
         
         if not products:
             print("❌ Быстрый парсинг не дал результатов")
-                return
+            return
         
         # Статистика БЖУ
         with_bju = sum(1 for p in products if any(p.get(f) for f in ['kcal_100g', 'protein_100g', 'fat_100g', 'carb_100g']))
