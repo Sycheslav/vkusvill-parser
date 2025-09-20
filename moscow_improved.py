@@ -114,12 +114,8 @@ class VkusvillImprovedParser:
             
             for result in results:
                 if isinstance(result, dict) and result:
-                    if self._is_ready_food(result):
-                        products.append(result)
-                        
-                        if len(products) >= limit:
-                            print(f"🎯 Достигнут лимит {limit} товаров")
-                            return products
+                    # Записываем ВСЕ товары без фильтра готовой еды
+                    products.append(result)
             
             await asyncio.sleep(0.5)
         
@@ -317,25 +313,13 @@ class VkusvillImprovedParser:
             pass
     
     def _is_ready_food(self, product: Dict) -> bool:
-        """Проверяем что это товар готовой еды."""
-        name = product.get('name', '').lower()
-        url = product.get('url', '').lower()
-        
-        # Если URL содержит готовую еду - точно подходит
-        if 'gotovaya-eda' in url:
-            return True
-        
-        # Ключевые слова готовой еды
-        ready_food_keywords = [
-            'суп', 'салат', 'борщ', 'омлет', 'блины', 'каша', 'пицца',
-            'паста', 'котлета', 'запеканка', 'сырники', 'плов', 'лазанья',
-            'шаурма', 'бургер', 'сэндвич', 'онигири', 'ролл', 'суши'
-        ]
-        
-        return any(keyword in name for keyword in ready_food_keywords)
+        """Принимаем ВСЕ товары без фильтрации."""
+        return True
     
-    async def _extract_full_product(self, url: str) -> Optional[Dict]:
-        """Полное извлечение товара."""
+    async def _extract_full_product(self, url: str, retry_count: int = 0) -> Optional[Dict]:
+        """Полное извлечение товара с retry для каждого компонента."""
+        max_retries = 3
+        
         try:
             response = await self.antibot_client.request(method="GET", url=url)
             if response.status_code != 200 or not HTMLParser:
@@ -348,25 +332,46 @@ class VkusvillImprovedParser:
             product = {
                 'id': self._extract_id(url),
                 'name': self._extract_name(parser, page_text),
-                'price': self._extract_price(parser, page_text),
+                'price': self._extract_price_with_retry(parser, page_text),
                 'category': 'Готовая еда',
                 'url': url,
                 'shop': 'vkusvill_improved',
                 'photo': self._extract_photo(parser),
-                'composition': self._extract_composition(parser, page_text),
+                'composition': self._extract_composition_with_retry(parser, page_text),
                 'tags': '',
                 'portion_g': self._extract_portion_weight(parser, page_text)
             }
             
-            # БЖУ
-            nutrition = self._extract_bju(parser, page_text)
+            # БЖУ с retry
+            nutrition = self._extract_bju_with_retry(parser, page_text)
             product.update(nutrition)
             
-            # Краткие логи
+            # Проверяем качество данных
             filled_bju = sum(1 for field in ['kcal_100g', 'protein_100g', 'fat_100g', 'carb_100g'] if product.get(field))
             has_composition = bool(product.get('composition'))
+            has_price = bool(product.get('price'))
             
-            print(f"      📦 {product['name'][:40]}... БЖУ:{filled_bju}/4 Состав:{'✓' if has_composition else '✗'} Цена:{product['price'] or '?'}")
+            # Retry если данные неполные
+            if retry_count < max_retries:
+                need_retry = False
+                
+                if filled_bju < 3:  # Мало БЖУ
+                    need_retry = True
+                    print(f"      🔄 RETRY #{retry_count + 1} - мало БЖУ ({filled_bju}/4)")
+                elif not has_composition:  # Нет состава
+                    need_retry = True
+                    print(f"      🔄 RETRY #{retry_count + 1} - нет состава")
+                elif not has_price:  # Нет цены
+                    need_retry = True
+                    print(f"      🔄 RETRY #{retry_count + 1} - нет цены")
+                
+                if need_retry:
+                    await asyncio.sleep(0.5 + retry_count * 0.5)  # Увеличиваем паузу
+                    return await self._extract_full_product(url, retry_count + 1)
+            
+            # Логи результата
+            quality_score = (filled_bju + (1 if has_composition else 0) + (1 if has_price else 0)) / 6 * 100
+            print(f"      📦 {product['name'][:35]}... БЖУ:{filled_bju}/4 Состав:{'✓' if has_composition else '✗'} Цена:{'✓' if has_price else '✗'} Качество:{quality_score:.0f}%")
             
             if not product['name']:
                 return None
@@ -374,6 +379,9 @@ class VkusvillImprovedParser:
             return product
             
         except Exception:
+            if retry_count < max_retries:
+                await asyncio.sleep(1)
+                return await self._extract_full_product(url, retry_count + 1)
             return None
     
     def _extract_id(self, url: str) -> str:
@@ -390,9 +398,10 @@ class VkusvillImprovedParser:
                 return element.text(strip=True)[:150]
         return ""
     
-    def _extract_price(self, parser, page_text: str) -> str:
-        """Цена товара."""
-        selectors = ['.price', '.product-price', '.cost', '.goods-price']
+    def _extract_price_with_retry(self, parser, page_text: str) -> str:
+        """Цена товара с расширенным поиском."""
+        # Метод 1: CSS селекторы
+        selectors = ['.price', '.product-price', '.cost', '.goods-price', '[class*="price"]', '[data-price]']
         
         for selector in selectors:
             elements = parser.css(selector)
@@ -406,6 +415,39 @@ class VkusvillImprovedParser:
                             return num.replace(',', '.')
                     except ValueError:
                         continue
+        
+        # Метод 2: Поиск в JSON данных
+        json_patterns = [
+            r'"price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?',
+            r'"cost"\s*:\s*"?(\d+(?:[.,]\d+)?)"?',
+            r'"currentPrice"\s*:\s*"?(\d+(?:[.,]\d+)?)"?'
+        ]
+        for pattern in json_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                try:
+                    price_val = float(match.group(1).replace(',', '.'))
+                    if 10 <= price_val <= 10000:
+                        return match.group(1).replace(',', '.')
+                except ValueError:
+                    continue
+        
+        # Метод 3: Поиск по тексту
+        text_patterns = [
+            r'(\d+(?:[.,]\d+)?)\s*руб',
+            r'(\d+(?:[.,]\d+)?)\s*₽',
+            r'цена[:\s]*(\d+(?:[.,]\d+)?)',
+            r'стоимость[:\s]*(\d+(?:[.,]\d+)?)'
+        ]
+        for pattern in text_patterns:
+            matches = re.finditer(pattern, page_text, re.I)
+            for match in matches:
+                try:
+                    price_val = float(match.group(1).replace(',', '.'))
+                    if 10 <= price_val <= 10000:
+                        return match.group(1).replace(',', '.')
+                except ValueError:
+                    continue
         
         return ""
     
@@ -425,19 +467,47 @@ class VkusvillImprovedParser:
         
         return ""
     
-    def _extract_composition(self, parser, page_text: str) -> str:
-        """Состав товара."""
-        elements = parser.css('div, p, span, td, li')
+    def _extract_composition_with_retry(self, parser, page_text: str) -> str:
+        """Состав товара с расширенным поиском."""
+        # Метод 1: Поиск по ключевому слову "Состав"
+        elements = parser.css('div, p, span, td, li, section, article')
         for element in elements:
             text = element.text().strip()
             text_lower = text.lower()
             
             if 'состав' in text_lower and len(text) > 10:
-                if not any(word in text_lower for word in ['меню', 'каталог', 'корзина']):
+                if not any(word in text_lower for word in ['меню', 'каталог', 'корзина', 'навигация']):
                     if text_lower.startswith('состав'):
                         return text[:800]
                     elif len(text) < 800:
                         return text[:500]
+        
+        # Метод 2: Поиск по CSS селекторам
+        composition_selectors = [
+            '[class*="composition"]', '[class*="ingredients"]', 
+            '[data-testid*="composition"]', '.product-composition',
+            '.goods-composition', '.ingredients', '[class*="content"]'
+        ]
+        
+        for selector in composition_selectors:
+            element = parser.css_first(selector)
+            if element:
+                text = element.text(strip=True)
+                if len(text) > 20 and len(text) < 1000:
+                    return text[:500]
+        
+        # Метод 3: Поиск в JSON данных
+        json_patterns = [
+            r'"composition"\s*:\s*"([^"]+)"',
+            r'"ingredients"\s*:\s*"([^"]+)"',
+            r'"description"\s*:\s*"([^"]*)"'
+        ]
+        for pattern in json_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                composition = match.group(1)
+                if len(composition) > 20:
+                    return composition[:500]
         
         return ""
     
@@ -455,55 +525,153 @@ class VkusvillImprovedParser:
                     continue
         return ""
     
-    def _extract_bju(self, parser, page_text: str) -> Dict[str, str]:
-        """Извлечение БЖУ."""
+    def _extract_bju_with_retry(self, parser, page_text: str) -> Dict[str, str]:
+        """Извлечение БЖУ с расширенным поиском."""
         nutrition = {'kcal_100g': '', 'protein_100g': '', 'fat_100g': '', 'carb_100g': ''}
         
-        # Поиск в элементах страницы
-        elements = parser.css('div, span, p, td, th, li')
+        # Метод 1: Поиск в элементах страницы
+        elements = parser.css('div, span, p, td, th, li, section')
         for element in elements:
             text = element.text().lower()
+            original_text = element.text()
             
-            if any(word in text for word in ['ккал', 'белки', 'жиры', 'углеводы']):
-                if ('ккал' in text or 'калорийность' in text) and not nutrition['kcal_100g']:
-                    match = re.search(r'(\d+(?:[.,]\d+)?)\s*ккал', text)
-                    if match:
-                        try:
-                            val = float(match.group(1).replace(',', '.'))
-                            if 10 <= val <= 900:
-                                nutrition['kcal_100g'] = match.group(1).replace(',', '.')
-                        except ValueError:
-                            pass
+            if any(word in text for word in ['ккал', 'белки', 'жиры', 'углеводы', 'калорийность', 'энергетическая']):
+                # Калории - расширенные паттерны
+                if ('ккал' in text or 'калорийность' in text or 'энергетическая' in text) and not nutrition['kcal_100g']:
+                    kcal_patterns = [
+                        r'(\d+(?:[.,]\d+)?)\s*ккал',
+                        r'ккал[:\s]*(\d+(?:[.,]\d+)?)',
+                        r'калорийность[:\s]*(\d+(?:[.,]\d+)?)',
+                        r'энергетическая\s+ценность[:\s]*(\d+(?:[.,]\d+)?)',
+                        r'(\d+(?:[.,]\d+)?)\s+ккал'
+                    ]
+                    for pattern in kcal_patterns:
+                        match = re.search(pattern, text)
+                        if match:
+                            try:
+                                val = float(match.group(1).replace(',', '.'))
+                                if 10 <= val <= 900:
+                                    nutrition['kcal_100g'] = match.group(1).replace(',', '.')
+                                    break
+                            except ValueError:
+                                continue
                 
+                # Белки - расширенные паттерны
                 if 'белк' in text and not nutrition['protein_100g']:
-                    match = re.search(r'(\d+(?:[.,]\d+)?)\s+белки,\s*г', text)
-                    if match:
-                        try:
-                            val = float(match.group(1).replace(',', '.'))
-                            if 0 <= val <= 100:
-                                nutrition['protein_100g'] = match.group(1).replace(',', '.')
-                        except ValueError:
-                            pass
+                    protein_patterns = [
+                        r'(\d+(?:[.,]\d+)?)\s+белки,\s*г',
+                        r'белк[иа][:\s]*(\d+(?:[.,]\d+)?)',
+                        r'белок[:\s]*(\d+(?:[.,]\d+)?)',
+                        r'протеин[:\s]*(\d+(?:[.,]\d+)?)'
+                    ]
+                    for pattern in protein_patterns:
+                        match = re.search(pattern, text)
+                        if match:
+                            try:
+                                val = float(match.group(1).replace(',', '.'))
+                                if 0 <= val <= 100:
+                                    nutrition['protein_100g'] = match.group(1).replace(',', '.')
+                                    break
+                            except ValueError:
+                                continue
                 
+                # Жиры - расширенные паттерны
                 if 'жир' in text and not nutrition['fat_100g']:
-                    match = re.search(r'(\d+(?:[.,]\d+)?)\s+жиры,\s*г', text)
-                    if match:
-                        try:
-                            val = float(match.group(1).replace(',', '.'))
-                            if 0 <= val <= 100:
-                                nutrition['fat_100g'] = match.group(1).replace(',', '.')
-                        except ValueError:
-                            pass
+                    fat_patterns = [
+                        r'(\d+(?:[.,]\d+)?)\s+жиры,\s*г',
+                        r'жир[ыа][:\s]*(\d+(?:[.,]\d+)?)',
+                        r'жир[:\s]*(\d+(?:[.,]\d+)?)'
+                    ]
+                    for pattern in fat_patterns:
+                        match = re.search(pattern, text)
+                        if match:
+                            try:
+                                val = float(match.group(1).replace(',', '.'))
+                                if 0 <= val <= 100:
+                                    nutrition['fat_100g'] = match.group(1).replace(',', '.')
+                                    break
+                            except ValueError:
+                                continue
                 
+                # Углеводы - расширенные паттерны
                 if 'углевод' in text and not nutrition['carb_100g']:
-                    match = re.search(r'(\d+(?:[.,]\d+)?)\s+углеводы,\s*г', text)
-                    if match:
-                        try:
-                            val = float(match.group(1).replace(',', '.'))
-                            if 0 <= val <= 100:
-                                nutrition['carb_100g'] = match.group(1).replace(',', '.')
-                        except ValueError:
-                            pass
+                    carb_patterns = [
+                        r'(\d+(?:[.,]\d+)?)\s+углеводы,\s*г',
+                        r'углевод[ыа][:\s]*(\d+(?:[.,]\d+)?)',
+                        r'углевод[:\s]*(\d+(?:[.,]\d+)?)'
+                    ]
+                    for pattern in carb_patterns:
+                        match = re.search(pattern, text)
+                        if match:
+                            try:
+                                val = float(match.group(1).replace(',', '.'))
+                                if 0 <= val <= 100:
+                                    nutrition['carb_100g'] = match.group(1).replace(',', '.')
+                                    break
+                            except ValueError:
+                                continue
+        
+        # Метод 2: JSON-LD структурированные данные
+        try:
+            blocks = re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', page_text, re.S|re.I)
+            for raw in blocks:
+                try:
+                    data = json.loads(raw)
+                    
+                    def visit(obj):
+                        if isinstance(obj, dict):
+                            if obj.get('@type') in ('NutritionInformation', 'Nutrition'):
+                                kcal = obj.get('calories') or obj.get('energy')
+                                protein = obj.get('proteinContent')
+                                fat = obj.get('fatContent')
+                                carb = obj.get('carbohydrateContent')
+                                
+                                if kcal and not nutrition['kcal_100g']: 
+                                    nutrition['kcal_100g'] = str(kcal)
+                                if protein and not nutrition['protein_100g']: 
+                                    nutrition['protein_100g'] = str(protein)
+                                if fat and not nutrition['fat_100g']: 
+                                    nutrition['fat_100g'] = str(fat)
+                                if carb and not nutrition['carb_100g']: 
+                                    nutrition['carb_100g'] = str(carb)
+                            
+                            for v in obj.values():
+                                visit(v)
+                        elif isinstance(obj, list):
+                            for v in obj:
+                                visit(v)
+                    
+                    visit(data)
+                except:
+                    continue
+        except:
+            pass
+        
+        # Метод 3: Поиск в таблицах
+        try:
+            tables = parser.css('table')
+            for table in tables:
+                rows = table.css('tr')
+                for row in rows:
+                    cells = row.css('td, th')
+                    if len(cells) >= 2:
+                        header = cells[0].text().lower()
+                        value_text = cells[1].text()
+                        
+                        num_match = re.search(r'(\d+(?:[.,]\d+)?)', value_text)
+                        if num_match:
+                            value = num_match.group(1).replace(',', '.')
+                            
+                            if ('ккал' in header or 'калорийность' in header) and not nutrition['kcal_100g']:
+                                nutrition['kcal_100g'] = value
+                            elif 'белк' in header and not nutrition['protein_100g']:
+                                nutrition['protein_100g'] = value
+                            elif 'жир' in header and not nutrition['fat_100g']:
+                                nutrition['fat_100g'] = value
+                            elif 'углевод' in header and not nutrition['carb_100g']:
+                                nutrition['carb_100g'] = value
+        except:
+            pass
         
         return nutrition
 
