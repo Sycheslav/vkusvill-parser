@@ -155,11 +155,16 @@ class VkusvillFastParser:
             for product_id in available_product_ids[:limit]:
                 if product_id in self.heavy_data:
                     heavy_product = self.heavy_data[product_id]
+                    # Определяем подкатегорию для товаров из базы
+                    subcategory = self._determine_subcategory(
+                        heavy_product.get('url', ''), 
+                        heavy_product.get('name', '')
+                    )
                     product = {
                         'id': heavy_product.get('id', product_id),
                         'name': heavy_product.get('name', ''),
                         'price': heavy_product.get('price', ''),
-                        'category': heavy_product.get('category', 'Готовая еда'),
+                        'category': subcategory,
                         'url': heavy_product.get('url', ''),
                         'shop': 'vkusvill_address',
                         'photo': heavy_product.get('photo', ''),
@@ -186,32 +191,83 @@ class VkusvillFastParser:
         """Получение списка доступных товаров по адресу."""
         available_ids = []
         
-        # Категории готовой еды
+        # Расширенные категории готовой еды (как в moscow_improved.py)
         categories = [
             "/goods/gotovaya-eda/",
-            "/goods/gotovaya-eda/salaty/",
-            "/goods/gotovaya-eda/supy/",
+            "/goods/gotovaya-eda/novinki/",
             "/goods/gotovaya-eda/vtorye-blyuda/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-myasom/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-ptitsey/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-ryboy-i-moreproduktami/",
+            "/goods/gotovaya-eda/vtorye-blyuda/garniry-i-vtorye-blyuda-bez-myasa/",
+            "/goods/gotovaya-eda/vtorye-blyuda/pasta-pitstsa/",
+            "/goods/gotovaya-eda/salaty/",
+            "/goods/gotovaya-eda/sendvichi-shaurma-i-burgery/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/malo-kaloriy/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/bolshe-belka/",
+            "/goods/gotovaya-eda/okroshki-i-letnie-supy/",
+            "/goods/gotovaya-eda/supy/",
             "/goods/gotovaya-eda/zavtraki/",
+            "/goods/gotovaya-eda/zavtraki/bliny-i-oladi/",
+            "/goods/gotovaya-eda/zavtraki/syrniki-zapekanki-i-rikotniki/",
+            "/goods/gotovaya-eda/zavtraki/omlety-i-zavtraki-s-yaytsom/",
+            "/goods/gotovaya-eda/zavtraki/kashi/",
+            "/goods/gotovaya-eda/zakuski/",
+            "/goods/gotovaya-eda/rolly-i-sety/",
+            "/goods/gotovaya-eda/onigiri/",
+            "/goods/gotovaya-eda/pirogi-pirozhki-i-lepyeshki/",
+            "/goods/gotovaya-eda/privezem-goryachim/",
+            "/goods/gotovaya-eda/privezem-goryachim/goryachie-napitki/",
+            "/goods/gotovaya-eda/tarelka-zdorovogo-pitaniya/",
+            "/goods/gotovaya-eda/veganskie-i-postnye-blyuda/",
+            "/goods/gotovaya-eda/semeynyy-format/",
+            "/goods/gotovaya-eda/kombo-na-kazhdyy-den/",
+            "/goods/gotovaya-eda/kukhni-mira/",
+            "/goods/gotovaya-eda/kukhni-mira/aziatskaya-kukhnya/",
+            "/goods/gotovaya-eda/kukhni-mira/russkaya-kukhnya/",
+            "/goods/gotovaya-eda/kukhni-mira/kukhnya-kavkaza/",
+            "/goods/gotovaya-eda/kukhni-mira/sredizemnomorskaya-kukhnya/",
+            "/goods/gotovaya-eda/bliny-i-oladi/",
+            "/goods/gotovaya-eda/khalyal/"
         ]
         
         for category in categories:
             try:
-                url = f"{self.BASE_URL}{category}"
-                response = await self.antibot_client.request(method="GET", url=url)
-                
-                if response.status_code == 200 and HTMLParser:
-                    parser = HTMLParser(response.text)
-                    
-                    # Ищем все ссылки на товары
-                    product_links = parser.css('a[href*="/goods/"][href$=".html"]')
-                    
-                    for link in product_links:
-                        href = link.attributes.get('href')
-                        if href:
-                            product_id = self._extract_id_from_url(urljoin(self.BASE_URL, href))
-                            if product_id and product_id not in available_ids:
-                                available_ids.append(product_id)
+                # Пагинация по страницам (как в moscow_improved.py)
+                for page_num in range(1, 20):  # До 20 страниц на категорию
+                    try:
+                        url = f"{self.BASE_URL}{category}?page={page_num}"
+                        response = await self.antibot_client.request(method="GET", url=url)
+                        
+                        if response.status_code != 200:
+                            break
+                            
+                        if not HTMLParser:
+                            break
+                            
+                        parser = HTMLParser(response.text)
+                        product_links = parser.css('a[href*="/goods/"][href$=".html"]')
+                        
+                        if not product_links:
+                            break
+
+                        page_count = 0
+                        for link in product_links:
+                            href = link.attributes.get('href')
+                            if href and '.html' in href and '/goods/' in href:
+                                product_id = self._extract_id_from_url(urljoin(self.BASE_URL, href))
+                                if product_id and product_id not in available_ids:
+                                    available_ids.append(product_id)
+                                    page_count += 1
+
+                        if page_count == 0:  # Нет новых товаров - конец
+                            break
+                            
+                        await asyncio.sleep(0.2)  # Пауза между страницами
+                        
+                    except Exception:
+                        break
                 
                 await asyncio.sleep(0.5)  # Пауза между категориями
                 
@@ -224,10 +280,42 @@ class VkusvillFastParser:
         """Резервный парсинг каталога если нет базы."""
         categories = [
             "/goods/gotovaya-eda/",
-            "/goods/gotovaya-eda/salaty/",
-            "/goods/gotovaya-eda/supy/",
+            "/goods/gotovaya-eda/novinki/",
             "/goods/gotovaya-eda/vtorye-blyuda/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-myasom/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-ptitsey/",
+            "/goods/gotovaya-eda/vtorye-blyuda/vtorye-blyuda-s-ryboy-i-moreproduktami/",
+            "/goods/gotovaya-eda/vtorye-blyuda/garniry-i-vtorye-blyuda-bez-myasa/",
+            "/goods/gotovaya-eda/vtorye-blyuda/pasta-pitstsa/",
+            "/goods/gotovaya-eda/salaty/",
+            "/goods/gotovaya-eda/sendvichi-shaurma-i-burgery/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/malo-kaloriy/",
+            "/goods/gotovaya-eda/bolshe-belka-menshe-kaloriy/bolshe-belka/",
+            "/goods/gotovaya-eda/okroshki-i-letnie-supy/",
+            "/goods/gotovaya-eda/supy/",
             "/goods/gotovaya-eda/zavtraki/",
+            "/goods/gotovaya-eda/zavtraki/bliny-i-oladi/",
+            "/goods/gotovaya-eda/zavtraki/syrniki-zapekanki-i-rikotniki/",
+            "/goods/gotovaya-eda/zavtraki/omlety-i-zavtraki-s-yaytsom/",
+            "/goods/gotovaya-eda/zavtraki/kashi/",
+            "/goods/gotovaya-eda/zakuski/",
+            "/goods/gotovaya-eda/rolly-i-sety/",
+            "/goods/gotovaya-eda/onigiri/",
+            "/goods/gotovaya-eda/pirogi-pirozhki-i-lepyeshki/",
+            "/goods/gotovaya-eda/privezem-goryachim/",
+            "/goods/gotovaya-eda/privezem-goryachim/goryachie-napitki/",
+            "/goods/gotovaya-eda/tarelka-zdorovogo-pitaniya/",
+            "/goods/gotovaya-eda/veganskie-i-postnye-blyuda/",
+            "/goods/gotovaya-eda/semeynyy-format/",
+            "/goods/gotovaya-eda/kombo-na-kazhdyy-den/",
+            "/goods/gotovaya-eda/kukhni-mira/",
+            "/goods/gotovaya-eda/kukhni-mira/aziatskaya-kukhnya/",
+            "/goods/gotovaya-eda/kukhni-mira/russkaya-kukhnya/",
+            "/goods/gotovaya-eda/kukhni-mira/kukhnya-kavkaza/",
+            "/goods/gotovaya-eda/kukhni-mira/sredizemnomorskaya-kukhnya/",
+            "/goods/gotovaya-eda/bliny-i-oladi/",
+            "/goods/gotovaya-eda/khalyal/"
         ]
         
         products = []
@@ -258,49 +346,65 @@ class VkusvillFastParser:
             print(f"⚠️ Ошибка установки локации: {e}")
     
     async def _parse_category_fast(self, category: str, max_products: int) -> List[Dict]:
-        """Быстрый парсинг категории без захода в карточки."""
+        """Быстрый парсинг категории без захода в карточки с пагинацией."""
         products = []
         
         try:
-            url = f"{self.BASE_URL}{category}"
-            print(f"   🔍 Парсим: {url}")
-            response = await self.antibot_client.request(method="GET", url=url)
-            
-            if response.status_code != 200:
-                print(f"   ❌ HTTP {response.status_code}")
-                return products
-                
-            if not HTMLParser:
-                print(f"   ❌ HTMLParser недоступен")
-                return products
-                
-            parser = HTMLParser(response.text)
-            
-            # Ищем все ссылки на товары
-            product_links = parser.css('a[href*="/goods/"][href$=".html"]')
-            print(f"   📦 Найдено ссылок на товары: {len(product_links)}")
-            
-            for link in product_links:
-                if len(products) >= max_products:
+            # Пагинация по страницам (как в moscow_improved.py)
+            for page_num in range(1, 10):  # До 10 страниц на категорию
+                try:
+                    url = f"{self.BASE_URL}{category}?page={page_num}"
+                    print(f"   🔍 Парсим страницу {page_num}: {url}")
+                    response = await self.antibot_client.request(method="GET", url=url)
+                    
+                    if response.status_code != 200:
+                        break
+                        
+                    if not HTMLParser:
+                        print(f"   ❌ HTMLParser недоступен")
+                        break
+                        
+                    parser = HTMLParser(response.text)
+                    
+                    # Ищем все ссылки на товары
+                    product_links = parser.css('a[href*="/goods/"][href$=".html"]')
+                    print(f"   📦 Страница {page_num}: найдено {len(product_links)} ссылок")
+                    
+                    if not product_links:
+                        break
+                    
+                    page_products = 0
+                    for link in product_links:
+                        if len(products) >= max_products:
+                            break
+                            
+                        product = self._extract_product_from_link(link)
+                        if product:
+                            # Дополняем данными из тяжелого парсера если есть
+                            if product['id'] in self.heavy_data:
+                                heavy_product = self.heavy_data[product['id']]
+                                product.update({
+                                    'kcal_100g': heavy_product.get('kcal_100g', ''),
+                                    'protein_100g': heavy_product.get('protein_100g', ''),
+                                    'fat_100g': heavy_product.get('fat_100g', ''),
+                                    'carb_100g': heavy_product.get('carb_100g', ''),
+                                    'composition': heavy_product.get('composition', ''),
+                                    'photo': heavy_product.get('photo', ''),
+                                    'portion_g': heavy_product.get('portion_g', '')
+                                })
+                            
+                            products.append(product)
+                            page_products += 1
+                            print(f"   ✅ {product['name'][:50]}...")
+                    
+                    if page_products == 0:  # Нет новых товаров - конец
+                        break
+                        
+                    await asyncio.sleep(0.2)  # Пауза между страницами
+                    
+                except Exception as e:
+                    print(f"   ❌ Ошибка страницы {page_num}: {e}")
                     break
-                    
-                product = self._extract_product_from_link(link)
-                if product:
-                    # Дополняем данными из тяжелого парсера если есть
-                    if product['id'] in self.heavy_data:
-                        heavy_product = self.heavy_data[product['id']]
-                        product.update({
-                            'kcal_100g': heavy_product.get('kcal_100g', ''),
-                            'protein_100g': heavy_product.get('protein_100g', ''),
-                            'fat_100g': heavy_product.get('fat_100g', ''),
-                            'carb_100g': heavy_product.get('carb_100g', ''),
-                            'composition': heavy_product.get('composition', ''),
-                            'photo': heavy_product.get('photo', ''),
-                            'portion_g': heavy_product.get('portion_g', '')
-                        })
-                    
-                    products.append(product)
-                    print(f"   ✅ {product['name'][:50]}...")
         
         except Exception as e:
             print(f"   ❌ Ошибка парсинга категории: {e}")
@@ -339,11 +443,14 @@ class VkusvillFastParser:
             if not name:
                 return None
             
+            # Определяем подкатегорию
+            subcategory = self._determine_subcategory(url, name)
+            
             return {
                 'id': product_id,
                 'name': name[:150],
                 'price': price,
-                'category': 'Готовая еда',
+                'category': subcategory,
                 'url': url,
                 'shop': 'vkusvill_fast',
                 'photo': '',
@@ -406,11 +513,14 @@ class VkusvillFastParser:
             if not name:
                 return None
             
+            # Определяем подкатегорию
+            subcategory = self._determine_subcategory(url, name)
+            
             return {
                 'id': product_id,
                 'name': name[:150],
                 'price': price,
-                'category': 'Готовая еда',
+                'category': subcategory,
                 'url': url,
                 'shop': 'vkusvill_fast',
                 'photo': photo,
@@ -430,6 +540,128 @@ class VkusvillFastParser:
         """Извлечение ID товара из URL."""
         match = re.search(r'/goods/([^/]+)\.html', url)
         return match.group(1) if match else str(hash(url))[-8:]
+    
+    def _determine_subcategory(self, url: str, name: str) -> str:
+        """Определение подкатегории товара по URL и названию."""
+        url_lower = url.lower()
+        name_lower = name.lower()
+        
+        # Определяем по URL категории
+        if '/salaty/' in url_lower:
+            return 'Салаты'
+        elif '/supy/' in url_lower:
+            return 'Супы'
+        elif '/sendvichi-shaurma-i-burgery/' in url_lower:
+            if any(word in name_lower for word in ['сэндвич', 'сендвич', 'бургер', 'шаурма']):
+                return 'Сэндвичи и бургеры'
+            return 'Сэндвичи и бургеры'
+        elif '/vtorye-blyuda/' in url_lower:
+            if '/vtorye-blyuda-s-myasom/' in url_lower:
+                return 'Вторые блюда с мясом'
+            elif '/vtorye-blyuda-s-ptitsey/' in url_lower:
+                return 'Вторые блюда с птицей'
+            elif '/vtorye-blyuda-s-ryboy-i-moreproduktami/' in url_lower:
+                return 'Вторые блюда с рыбой'
+            elif '/garniry-i-vtorye-blyuda-bez-myasa/' in url_lower:
+                return 'Гарниры и вегетарианские блюда'
+            elif '/pasta-pitstsa/' in url_lower:
+                if 'пицц' in name_lower:
+                    return 'Пицца'
+                elif any(word in name_lower for word in ['паста', 'макарон', 'спагетти', 'фетучини']):
+                    return 'Паста'
+                return 'Паста и пицца'
+            return 'Вторые блюда'
+        elif '/zavtraki/' in url_lower:
+            if '/bliny-i-oladi/' in url_lower or any(word in name_lower for word in ['блины', 'оладьи', 'олади']):
+                return 'Блины и оладьи'
+            elif '/syrniki-zapekanki-i-rikotniki/' in url_lower:
+                if any(word in name_lower for word in ['сырники', 'запеканк']):
+                    return 'Сырники и запеканки'
+                return 'Запеканки'
+            elif '/omlety-i-zavtraki-s-yaytsom/' in url_lower:
+                return 'Омлеты и яичные блюда'
+            elif '/kashi/' in url_lower:
+                return 'Каши'
+            return 'Завтраки'
+        elif '/okroshki-i-letnie-supy/' in url_lower:
+            return 'Окрошки и летние супы'
+        elif '/zakuski/' in url_lower:
+            return 'Закуски'
+        elif '/rolly-i-sety/' in url_lower:
+            return 'Роллы и сеты'
+        elif '/onigiri/' in url_lower:
+            return 'Онигири'
+        elif '/pirogi-pirozhki-i-lepyeshki/' in url_lower:
+            if any(word in name_lower for word in ['пирог', 'пирожок', 'лепешка']):
+                return 'Пироги и лепешки'
+            return 'Пироги'
+        elif '/privezem-goryachim/' in url_lower:
+            if '/goryachie-napitki/' in url_lower:
+                return 'Горячие напитки'
+            return 'Горячие блюда'
+        elif '/tarelka-zdorovogo-pitaniya/' in url_lower:
+            return 'Здоровое питание'
+        elif '/veganskie-i-postnye-blyuda/' in url_lower:
+            return 'Веганские и постные блюда'
+        elif '/semeynyy-format/' in url_lower:
+            return 'Семейный формат'
+        elif '/kombo-na-kazhdyy-den/' in url_lower:
+            return 'Комбо'
+        elif '/kukhni-mira/' in url_lower:
+            if '/aziatskaya-kukhnya/' in url_lower:
+                return 'Азиатская кухня'
+            elif '/russkaya-kukhnya/' in url_lower:
+                return 'Русская кухня'
+            elif '/kukhnya-kavkaza/' in url_lower:
+                return 'Кавказская кухня'
+            elif '/sredizemnomorskaya-kukhnya/' in url_lower:
+                return 'Средиземноморская кухня'
+            return 'Кухни мира'
+        elif '/bliny-i-oladi/' in url_lower:
+            return 'Блины и оладьи'
+        elif '/khalyal/' in url_lower:
+            return 'Халяль'
+        elif '/bolshe-belka-menshe-kaloriy/' in url_lower:
+            if '/malo-kaloriy/' in url_lower:
+                return 'Низкокалорийные блюда'
+            elif '/bolshe-belka/' in url_lower:
+                return 'Высокобелковые блюда'
+            return 'Диетические блюда'
+        
+        # Определяем по названию товара
+        if any(word in name_lower for word in ['салат', 'цезарь', 'винегрет', 'мимоза', 'оливье']):
+            return 'Салаты'
+        elif any(word in name_lower for word in ['суп', 'борщ', 'щи', 'харчо', 'солянка', 'окрошка']):
+            return 'Супы'
+        elif any(word in name_lower for word in ['сэндвич', 'сендвич', 'бургер', 'шаурма']):
+            return 'Сэндвичи и бургеры'
+        elif any(word in name_lower for word in ['пицц']):
+            return 'Пицца'
+        elif any(word in name_lower for word in ['паста', 'макарон', 'спагетти', 'фетучини', 'лазань']):
+            return 'Паста'
+        elif any(word in name_lower for word in ['блины', 'оладьи', 'олади']):
+            return 'Блины и оладьи'
+        elif any(word in name_lower for word in ['сырники']):
+            return 'Сырники'
+        elif any(word in name_lower for word in ['запеканк']):
+            return 'Запеканки'
+        elif any(word in name_lower for word in ['омлет', 'яичн']):
+            return 'Омлеты и яичные блюда'
+        elif any(word in name_lower for word in ['каша', 'овсянк', 'гречн']):
+            return 'Каши'
+        elif any(word in name_lower for word in ['котлет', 'биточк', 'тефтел', 'фрикадел']):
+            return 'Котлеты и фрикадельки'
+        elif any(word in name_lower for word in ['ролл', 'суши']):
+            return 'Роллы и суши'
+        elif any(word in name_lower for word in ['пирог', 'пирожок', 'лепешка']):
+            return 'Пироги и лепешки'
+        elif any(word in name_lower for word in ['завтрак']):
+            return 'Завтраки'
+        elif any(word in name_lower for word in ['обед', 'ужин']):
+            return 'Основные блюда'
+        
+        # По умолчанию
+        return 'Готовая еда'
 
 
 async def get_location_from_address(address: str) -> tuple:
