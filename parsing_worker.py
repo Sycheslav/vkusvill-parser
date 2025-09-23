@@ -51,6 +51,7 @@ class ParsingWorker:
             "start_time": datetime.now().isoformat()
         }
 
+
     async def connect(self):
         """Подключение к Redis и инициализация парсера."""
         try:
