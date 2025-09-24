@@ -36,7 +36,21 @@ class ParsingWorker:
         self.results_queue_prefix = "results:"
         self.antibot_client = None
         self.parser = None
-        self.base_csv_path = Path("data/moscow_improved_1758362624.csv")
+
+        # Исправленный путь к базовому файлу
+        # Ищем последний файл moscow_improved_*.csv в папке data
+        data_path = Path("data")
+        if data_path.exists():
+            moscow_files = list(data_path.glob("moscow_improved_*.csv"))
+            if moscow_files:
+                # Берем последний по времени файл
+                self.base_csv_path = sorted(moscow_files)[-1]
+            else:
+                # Если нет файлов, используем заглушку
+                self.base_csv_path = Path("data/moscow_improved_1758362624.csv")
+        else:
+            self.base_csv_path = Path("data/moscow_improved_1758362624.csv")
+
         self.base_df = None
         self.stats = {
             "tasks_processed": 0,

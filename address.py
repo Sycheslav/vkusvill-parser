@@ -45,14 +45,15 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
 
 class AntiBotClient:
-    """Простой HTTP клиент для обхода защиты."""
-    
+    """HTTP клиент с поддержкой cookies для обхода защиты."""
+
     def __init__(self, concurrency: int = 10, timeout: int = 30):
         self.semaphore = asyncio.Semaphore(concurrency)
         self.timeout = timeout
-        
+        self.cookies = {}  # Добавляем хранилище cookies
+
     async def request(self, method: str, url: str, **kwargs):
-        """Выполнить HTTP запрос."""
+        """Выполнить HTTP запрос с сохранением cookies."""
         async with self.semaphore:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -62,15 +63,24 @@ class AntiBotClient:
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
-            
-            async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
+
+            # Создаем клиент с cookies
+            async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    headers=headers,
+                    cookies=self.cookies,  # Передаем cookies
+                    follow_redirects=True
+            ) as client:
                 response = await client.request(method, url, **kwargs)
+
+                # Сохраняем cookies из ответа
+                self.cookies.update(response.cookies)
+
                 return response
-    
+
     async def close(self):
         """Закрытие клиента."""
         pass
-
 
 class LocationService:
     """Простой сервис геолокации."""
@@ -334,17 +344,49 @@ class VkusvillFastParser:
         
         print(f"⚡ Быстрый парсинг завершен: {len(products)} товаров")
         return products[:limit]
-    
+
     async def _set_location(self, city: str, coords: str):
-        """Установка локации."""
+        """Установка локации с правильной обработкой cookies."""
         try:
             lat, lon = coords.split(',')
-            location_url = f"{self.BASE_URL}/api/location?city={quote(city)}&lat={lat.strip()}&lon={lon.strip()}"
-            await self.antibot_client.request(method="GET", url=location_url)
-            print(f"📍 Локация установлена: {city}")
+
+            # Сначала загружаем главную страницу для получения начальных cookies
+            await self.antibot_client.request(method="GET", url=self.BASE_URL)
+
+            # Теперь устанавливаем локацию
+            location_url = f"{self.BASE_URL}/api/v2/site/address/coords/"
+            location_data = {
+                "lat": float(lat.strip()),
+                "lon": float(lon.strip()),
+                "radius": 5000
+            }
+
+            # POST запрос для установки координат
+            response = await self.antibot_client.request(
+                method="POST",
+                url=location_url,
+                json=location_data,
+                headers={'Content-Type': 'application/json'}
+            )
+
+            if response.status_code == 200:
+                print(f"📍 Локация установлена: {city} ({coords})")
+            else:
+                # Пробуем альтернативный метод
+                location_url_alt = f"{self.BASE_URL}/ajax/user/setCoords/"
+                await self.antibot_client.request(
+                    method="POST",
+                    url=location_url_alt,
+                    data={"lat": lat.strip(), "lon": lon.strip()},
+                    headers={'X-Requested-With': 'XMLHttpRequest'}
+                )
+                print(f"📍 Локация установлена (альтернативный метод): {city}")
+
         except Exception as e:
             print(f"⚠️ Ошибка установки локации: {e}")
-    
+            # Продолжаем работу даже если не удалось установить локацию
+
+
     async def _parse_category_fast(self, category: str, max_products: int) -> List[Dict]:
         """Быстрый парсинг категории без захода в карточки с пагинацией."""
         products = []
