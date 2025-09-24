@@ -50,11 +50,12 @@ class AntiBotClient:
     def __init__(self, concurrency: int = 10, timeout: int = 30):
         self.semaphore = asyncio.Semaphore(concurrency)
         self.timeout = timeout
-        self.cookies = {}  # Добавляем хранилище cookies
+        self.cookies = {}
+        self.client = None  # Храним клиент
 
-    async def request(self, method: str, url: str, **kwargs):
-        """Выполнить HTTP запрос с сохранением cookies."""
-        async with self.semaphore:
+    async def _ensure_client(self):
+        """Создание или переиспользование клиента."""
+        if self.client is None:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -63,24 +64,35 @@ class AntiBotClient:
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
+            self.client = httpx.AsyncClient(
+                timeout=self.timeout,
+                headers=headers,
+                cookies=self.cookies,
+                follow_redirects=True,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        return self.client
 
-            # Создаем клиент с cookies
-            async with httpx.AsyncClient(
-                    timeout=self.timeout,
-                    headers=headers,
-                    cookies=self.cookies,  # Передаем cookies
-                    follow_redirects=True
-            ) as client:
+    async def request(self, method: str, url: str, **kwargs):
+        """Выполнить HTTP запрос с сохранением cookies."""
+        async with self.semaphore:
+            client = await self._ensure_client()
+            try:
                 response = await client.request(method, url, **kwargs)
-
-                # Сохраняем cookies из ответа
+                # Обновляем cookies
                 self.cookies.update(response.cookies)
-
                 return response
+            except httpx.TimeoutException:
+                # При таймауте пересоздаем клиент
+                await self.close()
+                self.client = None
+                raise
 
     async def close(self):
         """Закрытие клиента."""
-        pass
+        if self.client:
+            await self.client.aclose()
+            self.client = None
 
 class LocationService:
     """Простой сервис геолокации."""
@@ -118,27 +130,34 @@ class VkusvillFastParser:
         self.antibot_client = antibot_client
         self.BASE_URL = "https://vkusvill.ru"
         self.heavy_data = {}  # База данных тяжелого парсера
-        
+
     def load_heavy_data(self, heavy_file_path: str = None):
         """Загрузка данных тяжелого парсера."""
         if not heavy_file_path:
             # Поиск последнего файла тяжелого парсера
-            data_dir = Path("data")
+            data_dir = Path(__file__).parent / "data"
             if data_dir.exists():
                 heavy_files = list(data_dir.glob("moscow_improved_*.csv"))
+                if not heavy_files:
+                    heavy_files = list(data_dir.glob("moscow_heavy_*.csv"))
+
                 if heavy_files:
-                    heavy_file_path = str(sorted(heavy_files)[-1])  # Последний файл
-        
+                    # Берем последний по времени модификации
+                    heavy_file_path = max(heavy_files, key=lambda p: p.stat().st_mtime)
+
         if heavy_file_path and Path(heavy_file_path).exists():
             print(f"📚 Загружаем базу тяжелого парсера: {heavy_file_path}")
             try:
                 with open(heavy_file_path, 'r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        self.heavy_data[row['id']] = row
+                        if row.get('id'):  # Проверяем наличие ID
+                            self.heavy_data[row['id']] = row
                 print(f"   ✅ Загружено {len(self.heavy_data)} товаров из базы")
             except Exception as e:
                 print(f"   ❌ Ошибка загрузки базы: {e}")
+                import traceback
+                traceback.print_exc()
         else:
             print("⚠️ База тяжелого парсера не найдена, работаем только с каталогом")
     
@@ -350,41 +369,51 @@ class VkusvillFastParser:
         try:
             lat, lon = coords.split(',')
 
-            # Сначала загружаем главную страницу для получения начальных cookies
-            await self.antibot_client.request(method="GET", url=self.BASE_URL)
+            # Получаем главную страницу для cookies
+            main_response = await self.antibot_client.request(method="GET", url=self.BASE_URL)
 
-            # Теперь устанавливаем локацию
-            location_url = f"{self.BASE_URL}/api/v2/site/address/coords/"
+            # Используем правильный API endpoint
+            headers = {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Referer': self.BASE_URL
+            }
+
+            # Сначала пробуем новый API
             location_data = {
                 "lat": float(lat.strip()),
                 "lon": float(lon.strip()),
-                "radius": 5000
+                "radius": 5000,
+                "city": city
             }
 
-            # POST запрос для установки координат
-            response = await self.antibot_client.request(
-                method="POST",
-                url=location_url,
-                json=location_data,
-                headers={'Content-Type': 'application/json'}
-            )
-
-            if response.status_code == 200:
-                print(f"📍 Локация установлена: {city} ({coords})")
-            else:
-                # Пробуем альтернативный метод
-                location_url_alt = f"{self.BASE_URL}/ajax/user/setCoords/"
-                await self.antibot_client.request(
+            try:
+                response = await self.antibot_client.request(
                     method="POST",
-                    url=location_url_alt,
-                    data={"lat": lat.strip(), "lon": lon.strip()},
-                    headers={'X-Requested-With': 'XMLHttpRequest'}
+                    url=f"{self.BASE_URL}/ajax/user/setCoords/",
+                    json=location_data,
+                    headers=headers
                 )
-                print(f"📍 Локация установлена (альтернативный метод): {city}")
+
+                if response.status_code == 200:
+                    print(f"📍 Локация установлена: {city} ({coords})")
+                    return
+            except:
+                pass
+
+            # Альтернативный метод через GET
+            location_url = f"{self.BASE_URL}/ajax/user/setCoords/?lat={lat.strip()}&lon={lon.strip()}"
+            await self.antibot_client.request(
+                method="GET",
+                url=location_url,
+                headers={'X-Requested-With': 'XMLHttpRequest'}
+            )
+            print(f"📍 Локация установлена (альтернативный метод): {city}")
 
         except Exception as e:
             print(f"⚠️ Ошибка установки локации: {e}")
-            # Продолжаем работу даже если не удалось установить локацию
+            # Продолжаем даже если не удалось
 
 
     async def _parse_category_fast(self, category: str, max_products: int) -> List[Dict]:

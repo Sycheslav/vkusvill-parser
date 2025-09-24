@@ -26,15 +26,17 @@ import httpx
 
 
 class AntiBotClient:
-    """Простой HTTP клиент для обхода защиты."""
-    
+    """HTTP клиент с поддержкой cookies для обхода защиты."""
+
     def __init__(self, concurrency: int = 10, timeout: int = 30):
         self.semaphore = asyncio.Semaphore(concurrency)
         self.timeout = timeout
-        
-    async def request(self, method: str, url: str, **kwargs):
-        """Выполнить HTTP запрос."""
-        async with self.semaphore:
+        self.cookies = {}
+        self.client = None  # Храним клиент
+
+    async def _ensure_client(self):
+        """Создание или переиспользование клиента."""
+        if self.client is None:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -43,14 +45,35 @@ class AntiBotClient:
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
-            
-            async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
+            self.client = httpx.AsyncClient(
+                timeout=self.timeout,
+                headers=headers,
+                cookies=self.cookies,
+                follow_redirects=True,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        return self.client
+
+    async def request(self, method: str, url: str, **kwargs):
+        """Выполнить HTTP запрос с сохранением cookies."""
+        async with self.semaphore:
+            client = await self._ensure_client()
+            try:
                 response = await client.request(method, url, **kwargs)
+                # Обновляем cookies
+                self.cookies.update(response.cookies)
                 return response
-    
+            except httpx.TimeoutException:
+                # При таймауте пересоздаем клиент
+                await self.close()
+                self.client = None
+                raise
+
     async def close(self):
         """Закрытие клиента."""
-        pass
+        if self.client:
+            await self.client.aclose()
+            self.client = None
 
 
 class VkusvillHeavyParser:

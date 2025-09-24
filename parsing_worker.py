@@ -5,6 +5,7 @@ parsing_worker.py - Воркер парсера с улучшенной обра
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 import pandas as pd
@@ -12,7 +13,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-sys.path.append(str(Path(__file__).parent))
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
 
 from address import VkusvillFastParser, AntiBotClient, get_location_from_address
 
@@ -37,19 +39,26 @@ class ParsingWorker:
         self.antibot_client = None
         self.parser = None
 
-        # Исправленный путь к базовому файлу
-        # Ищем последний файл moscow_improved_*.csv в папке data
-        data_path = Path("data")
+        # Улучшенный поиск базового файла
+        data_path = Path(__file__).parent / "data"
+        self.base_csv_path = None
+
         if data_path.exists():
+            # Ищем файлы moscow_improved или moscow_heavy
             moscow_files = list(data_path.glob("moscow_improved_*.csv"))
+            if not moscow_files:
+                moscow_files = list(data_path.glob("moscow_heavy_*.csv"))
+
             if moscow_files:
-                # Берем последний по времени файл
-                self.base_csv_path = sorted(moscow_files)[-1]
+                # Сортируем по времени модификации
+                self.base_csv_path = max(moscow_files, key=lambda p: p.stat().st_mtime)
+                print(f"📚 Найден базовый файл: {self.base_csv_path}")
             else:
-                # Если нет файлов, используем заглушку
-                self.base_csv_path = Path("data/moscow_improved_1758362624.csv")
+                print("⚠️ Базовые файлы не найдены, будет создан новый")
         else:
-            self.base_csv_path = Path("data/moscow_improved_1758362624.csv")
+            # Создаем директорию data если её нет
+            data_path.mkdir(exist_ok=True)
+            print(f"📁 Создана директория: {data_path}")
 
         self.base_df = None
         self.stats = {
@@ -269,7 +278,16 @@ class ParsingWorker:
         logger.info("🔄 Запуск полного парсинга...")
 
         try:
-            from moscow_improved import VkusvillHeavyParser
+            # Динамический импорт с обработкой ошибок
+            try:
+                from moscow_improved import VkusvillHeavyParser
+            except ImportError:
+                # Если moscow_improved недоступен, используем moscow
+                try:
+                    from moscow import VkusvillHeavyParser
+                except ImportError:
+                    logger.error("Не найден модуль для тяжелого парсинга")
+                    return self.base_df
 
             heavy_parser = VkusvillHeavyParser(self.antibot_client)
             products = await heavy_parser.scrape_heavy(limit=1500)
@@ -278,15 +296,17 @@ class ParsingWorker:
                 df = pd.DataFrame(products)
 
                 timestamp = int(time.time())
-                new_csv_path = Path(f"data/moscow_improved_{timestamp}.csv")
-                new_csv_path.parent.mkdir(exist_ok=True)
+                data_path = Path(__file__).parent / "data"
+                data_path.mkdir(exist_ok=True)
 
+                new_csv_path = data_path / f"moscow_improved_{timestamp}.csv"
                 df.to_csv(new_csv_path, index=False, encoding='utf-8')
                 logger.info(f"💾 Сохранено в {new_csv_path}")
 
                 self.base_df = df
                 self.base_csv_path = new_csv_path
 
+                # Обновляем данные в парсере
                 self.parser.heavy_data = {}
                 for _, row in df.iterrows():
                     self.parser.heavy_data[row['id']] = row.to_dict()
@@ -298,7 +318,9 @@ class ParsingWorker:
 
         except Exception as e:
             logger.error(f"Ошибка полного парсинга: {e}")
-            raise
+            import traceback
+            traceback.print_exc()
+            return self.base_df
 
     async def run(self):
         """Основной цикл с улучшенной обработкой ошибок"""
